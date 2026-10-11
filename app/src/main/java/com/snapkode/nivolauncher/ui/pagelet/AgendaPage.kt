@@ -34,6 +34,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextAlign
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -143,16 +152,17 @@ internal fun AgendaBody(
     Column(Modifier.fillMaxSize()) {
         // ---- the masthead: the day in big type ---------------------------------------------------------------------
         val day = Date(dayStartMs)
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().padding(start = NivoSpace.xl, end = NivoSpace.s, top = NivoSpace.l), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 Text(
                     (if (isToday) "TODAY" else "TOMORROW") + " · " + SimpleDateFormat("d MMMM", Locale.getDefault()).format(day).uppercase(),
                     style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold), color = scheme.primary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     SimpleDateFormat("EEEE", Locale.getDefault()).format(day),
                     style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Light, letterSpacing = (-0.5).sp),
-                    color = scheme.onSurface, modifier = Modifier.semantics { heading() },
+                    color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
                 )
                 Text(
                     if (!allowed) "Your calendar, at a glance" else when (events.size) { 0 -> "Nothing planned"; 1 -> "1 event"; else -> "${events.size} events" },
@@ -161,12 +171,12 @@ internal fun AgendaBody(
             }
             IconButton(onClick = onOptions) { Icon(Icons.Outlined.Tune, "Customise Agenda", tint = scheme.onSurfaceVariant) }
         }
-        DaySwitch(dayOffset, onDay, Modifier.padding(start = 24.dp, top = 16.dp))
+        DaySwitch(dayOffset, onDay, Modifier.padding(start = NivoSpace.xl, top = NivoSpace.l))
 
         when {
             !allowed -> AskCard(
                 "See your day here", "The Agenda reads today's events from the calendars on this phone. It only reads, and nothing leaves your device.",
-                if (refused) "Open settings" else "Allow calendar", Modifier.padding(16.dp),
+                if (refused) "Open settings" else "Allow calendar", Modifier.padding(NivoSpace.l), icon = Icons.Outlined.CalendarMonth,
             ) { onAsk() }
             events.isEmpty() -> ClearDay(isToday, Modifier.weight(1f))
             else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 32.dp)) {
@@ -196,21 +206,30 @@ private fun keyOf(it: AgendaItem): String = when (it) {
 
 private fun eventColor(e: CalEvent, fallback: Color) = if (e.color != 0) Color(e.color).copy(alpha = 1f) else fallback
 
-/** Today / Tomorrow as one pill with a sliding highlight. */
+/** Today / Tomorrow as one pill with a sliding highlight. A full 48 dp tall, so each half is an easy target. */
 @Composable
 private fun DaySwitch(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
     val w = 108.dp
-    val x by animateDpAsState(w * selected, LocalMotion.current.spring(1f), label = "daySwitch")
-    Box(modifier.height(40.dp).width(w * 2).background(scheme.surfaceContainerHigh, CircleShape).padding(3.dp)) {
-        Box(Modifier.offset(x = x).width(w - 3.dp).fillMaxHeight().background(scheme.primary, CircleShape))
-        Row(Modifier.fillMaxSize()) {
+    val inset = 4.dp
+    // Each half of the track inside the inset; the highlight slides exactly one half, so it sits evenly at both ends.
+    val half = w - inset
+    val x by animateDpAsState(half * selected, LocalMotion.current.spring(1f), label = "daySwitch")
+    Box(
+        modifier.height(NivoTouch.min).width(w * 2).background(scheme.surfaceContainerHigh, CircleShape)
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), CircleShape).padding(inset),
+    ) {
+        Box(Modifier.offset(x = x).width(half).fillMaxHeight().background(scheme.primary, CircleShape))
+        Row(Modifier.fillMaxSize().selectableGroup()) {
             listOf("Today", "Tomorrow").forEachIndexed { i, label ->
                 Box(
                     Modifier.weight(1f).fillMaxHeight().clip(CircleShape).selectable(selected == i, role = Role.Tab) { onSelect(i) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(label, style = MaterialTheme.typography.labelLarge, color = if (selected == i) scheme.onPrimary else scheme.onSurfaceVariant)
+                    Text(
+                        label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        color = if (selected == i) scheme.onPrimary else scheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -231,7 +250,13 @@ private fun DayRibbon(events: List<CalEvent>, nowMs: Long?, dayStartMs: Long, cl
     val reduced = LocalMotion.current.reduced
     val reveal = remember { Animatable(if (reduced) 1f else 0f) }
     LaunchedEffect(Unit) { reveal.animateTo(1f, tween(700)) }
-    Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(24.dp)).border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(24.dp)).padding(16.dp)) {
+    val timedCount = timed.size
+    Column(
+        Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(NivoRadius.card + 4.dp))
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(NivoRadius.card + 4.dp)).padding(NivoSpace.l)
+            // A picture of the day; the list below carries the detail, so it reads as one line.
+            .clearAndSetSemantics { contentDescription = "Day overview, " + if (timedCount == 1) "1 timed event" else "$timedCount timed events" },
+    ) {
         val track = scheme.surfaceContainerHighest; val nowC = scheme.primary; val primary = scheme.primary; val tick = scheme.outlineVariant
         Canvas(Modifier.fillMaxWidth().height(34.dp)) {
             val w = size.width; val h = size.height
@@ -254,7 +279,7 @@ private fun DayRibbon(events: List<CalEvent>, nowMs: Long?, dayStartMs: Long, cl
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             listOf(firstH, (firstH + lastH) / 2, lastH).forEach { hh ->
-                Text(clock(dayStartMs + hh * hourMs), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
+                Text(clock(dayStartMs + hh * hourMs), style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"), color = scheme.onSurfaceVariant)
             }
         }
     }
@@ -267,8 +292,10 @@ private fun UpNextCard(e: CalEvent, nowMs: Long, clock: (Long) -> String, modifi
     val c = eventColor(e, scheme.primary)
     val on = e.beginMs <= nowMs
     Box(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(28.dp))
+        modifier.fillMaxWidth().clip(RoundedCornerShape(NivoRadius.hero))
             .background(Brush.linearGradient(listOf(lerp(scheme.surfaceContainerHigh, c, 0.28f), scheme.surfaceContainerHigh)))
+            .border(1.dp, c.copy(alpha = 0.22f), RoundedCornerShape(NivoRadius.hero))
+            .semantics(mergeDescendants = true) {}
             .padding(20.dp),
     ) {
         Column {
@@ -281,12 +308,13 @@ private fun UpNextCard(e: CalEvent, nowMs: Long, clock: (Long) -> String, modifi
             }
             Text(
                 AgendaModel.countdown(e, nowMs), Modifier.padding(top = 8.dp),
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light), color = scheme.onSurface,
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light, fontFeatureSettings = "tnum"), color = scheme.onSurface,
             )
             Text(e.title, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp))
             Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 Chip("${clock(e.beginMs)} – ${clock(e.endMs)}")
-                e.location?.let { Spacer(Modifier.width(8.dp)); Chip(it, Icons.Outlined.LocationOn) }
+                // The place gives way (ellipsised) before the time does.
+                e.location?.let { Spacer(Modifier.width(NivoSpace.s)); Chip(it, Icons.Outlined.LocationOn, Modifier.weight(1f, fill = false)) }
             }
             if (on) {
                 // How far through it we are.
@@ -300,11 +328,11 @@ private fun UpNextCard(e: CalEvent, nowMs: Long, clock: (Long) -> String, modifi
 }
 
 @Composable
-private fun Chip(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null) {
+private fun Chip(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector? = null, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    Row(Modifier.background(scheme.surface.copy(alpha = 0.7f), CircleShape).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (icon != null) Icon(icon, null, Modifier.size(14.dp).padding(end = 2.dp), tint = scheme.onSurfaceVariant)
-        Text(text, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(modifier.background(scheme.surface.copy(alpha = 0.7f), CircleShape).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) { Icon(icon, null, Modifier.size(14.dp), tint = scheme.onSurfaceVariant); Spacer(Modifier.width(NivoSpace.xs)) }
+        Text(text, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -322,11 +350,13 @@ private fun PulseDot(color: Color, pulsing: Boolean) {
 private fun EarlierRow(count: Int, onShow: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(
-        Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(14.dp)).clickable(role = Role.Button, onClick = onShow).padding(horizontal = 8.dp),
+        Modifier.padding(top = NivoSpace.m).fillMaxWidth().heightIn(min = NivoTouch.min).clip(RoundedCornerShape(NivoRadius.control))
+            .clickable(role = Role.Button, onClickLabel = "Show earlier events", onClick = onShow).padding(horizontal = NivoSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Earlier today", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Text("$count done · show", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+        Text("$count done · Show", style = MaterialTheme.typography.labelLarge, color = scheme.primary)
+        Icon(Icons.Outlined.ExpandMore, null, Modifier.padding(start = NivoSpace.xs).size(18.dp), tint = scheme.primary)
     }
 }
 
@@ -356,7 +386,7 @@ private fun TimelineRow(item: AgendaItem.Timed, time: String, meridiem: String, 
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).alpha(if (item.past) 0.45f else 1f)) {
         Column(Modifier.width(TimeCol).padding(top = 14.dp), horizontalAlignment = Alignment.End) {
             if (item.hourStart) {
-                Text(time, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface)
+                Text(time, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"), color = scheme.onSurface, maxLines = 1)
                 if (meridiem.isNotEmpty()) Text(meridiem, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
             }
         }
@@ -368,14 +398,14 @@ private fun TimelineRow(item: AgendaItem.Timed, time: String, meridiem: String, 
             drawCircle(c, 5.dp.toPx(), Offset(x, 22.dp.toPx()))
         })
         Box(
-            Modifier.weight(1f).padding(vertical = 5.dp).clip(RoundedCornerShape(20.dp))
+            Modifier.weight(1f).padding(vertical = 5.dp).clip(RoundedCornerShape(NivoRadius.card)).semantics(mergeDescendants = true) {}
                 .background(if (item.current) lerp(scheme.surfaceContainerHigh, c, 0.16f) else scheme.surfaceContainerLow)
                 .drawBehind { drawRect(c, size = Size(4.dp.toPx(), size.height)) }
                 .padding(start = 18.dp, end = 14.dp, top = 12.dp, bottom = 12.dp),
         ) {
             Column {
                 Text(item.event.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(range, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
+                Text(range, style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"), color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = NivoSpace.xxs), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 item.event.location?.let {
                     Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Outlined.LocationOn, null, Modifier.size(14.dp), tint = scheme.onSurfaceVariant)
@@ -397,7 +427,7 @@ private fun FreeRow(span: String) {
         Box(Modifier.width(RailCol).fillMaxHeight().drawBehind {
             drawLine(rail, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())))
         })
-        Text("Free · $span", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+        Text("Free · $span", Modifier.padding(start = NivoSpace.s), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), color = scheme.onSurfaceVariant, maxLines = 1)
     }
 }
 
@@ -407,7 +437,7 @@ private fun NowRow(time: String) {
     val scheme = MaterialTheme.colorScheme
     Row(Modifier.fillMaxWidth().height(32.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(TimeCol), contentAlignment = Alignment.CenterEnd) {
-            Text(time, Modifier.background(scheme.primary, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = scheme.onPrimary, maxLines = 1)
+            Text(time, Modifier.background(scheme.primary, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"), color = scheme.onPrimary, maxLines = 1)
         }
         Box(Modifier.width(RailCol), contentAlignment = Alignment.Center) { Box(Modifier.size(10.dp).background(scheme.primary, CircleShape)) }
         Box(Modifier.weight(1f).height(2.dp).background(Brush.horizontalGradient(listOf(scheme.primary, scheme.primary.copy(alpha = 0f)))))
@@ -430,7 +460,13 @@ private fun ClearDay(isToday: Boolean, modifier: Modifier = Modifier) {
             for (i in 0 until 3) drawRoundRect(ring, Offset(w * (0.26f + i * 0.17f), w * 0.25f), Size(w * 0.04f, w * 0.12f), CornerRadius(w * 0.02f))
             for (r in 0 until 3) drawRoundRect(ring.copy(alpha = 0.35f), Offset(w * 0.22f, w * (0.55f + r * 0.1f)), Size(w * (0.46f - r * 0.1f), w * 0.04f), CornerRadius(w * 0.02f))
         }
-        Text(if (isToday) "A clear rest of the day" else "Nothing planned tomorrow", style = MaterialTheme.typography.titleLarge, color = scheme.onSurface, modifier = Modifier.padding(top = 16.dp))
-        Text("Time that's yours. Enjoy it.", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            if (isToday) "A clear rest of the day" else "Nothing planned tomorrow", style = MaterialTheme.typography.titleLarge, color = scheme.onSurface,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.l).semantics { heading() },
+        )
+        Text(
+            "Time that's yours. Enjoy it.", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.xs),
+        )
     }
 }

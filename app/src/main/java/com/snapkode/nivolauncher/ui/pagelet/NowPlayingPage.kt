@@ -11,6 +11,12 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.ui.semantics.heading
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.pressFeedback
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -115,7 +121,7 @@ internal fun NowPlayingBody(media: NowPlaying?, listening: Boolean, app: String?
     val base = colors?.base ?: scheme.primaryContainer
     // The page takes on the cover's colour at the top and settles into the surface below, so the bars around it stay calm.
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = NivoSpace.xl, end = NivoSpace.s, top = NivoSpace.l), verticalAlignment = Alignment.CenterVertically) {
             if (media?.playing == true) Equalizer(accent, Modifier.padding(end = 10.dp))
             Text(
                 when {
@@ -125,22 +131,27 @@ internal fun NowPlayingBody(media: NowPlaying?, listening: Boolean, app: String?
                 },
                 style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold),
                 color = if (media != null) lerp(accent, scheme.onSurface, 0.5f) else scheme.primary, modifier = Modifier.weight(1f),
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             IconButton(onClick = onOptions) { Icon(Icons.Outlined.Tune, "Customise Now playing", tint = scheme.onSurfaceVariant) }
         }
         when {
             media != null -> Player(media, accent)
-            !listening -> Column(Modifier.fillMaxSize().padding(16.dp)) {
-                Record(Modifier.padding(vertical = 24.dp).align(Alignment.CenterHorizontally), spinning = false)
+            !listening -> Column(Modifier.fillMaxSize().padding(NivoSpace.l)) {
+                Record(Modifier.padding(vertical = NivoSpace.xl).align(Alignment.CenterHorizontally), spinning = false)
                 AskCard(
                     "Let Nivo see what's playing",
                     "Music controls come from the system's media sessions, which need notification access. Nivo only reads what is playing; nothing leaves your phone.",
-                    "Open settings",
+                    "Open settings", icon = Icons.Outlined.NotificationsActive,
                 ) { onAllow() }
             }
-            else -> Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            else -> Column(Modifier.fillMaxSize().padding(NivoSpace.xxl), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                 Record(spinning = false)
-                Text("Silence, for now", style = MaterialTheme.typography.headlineSmall, color = scheme.onSurface, modifier = Modifier.padding(top = 24.dp))
+                Text(
+                    "Silence, for now", style = MaterialTheme.typography.headlineSmall, color = scheme.onSurface,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = NivoSpace.xl).semantics { heading() },
+                )
                 Text(
                     "Start a song, a podcast or an audiobook in any app and it plays here, with its cover.",
                     style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp),
@@ -183,10 +194,11 @@ internal fun Player(m: NowPlaying, accent: Color = MaterialTheme.colorScheme.pri
             }
             Spacer(Modifier.weight(0.5f))
             Column(Modifier.fillMaxWidth()) {
+                // A long title scrolls; under reduced motion it stays put and ends in an ellipsis instead.
                 Text(
-                    m.title, Modifier.fillMaxWidth().basicMarquee(),
+                    m.title, Modifier.fillMaxWidth().then(if (motion.reduced) Modifier else Modifier.basicMarquee()),
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp),
-                    color = scheme.onSurface, maxLines = 1,
+                    color = scheme.onSurface, maxLines = 1, overflow = if (motion.reduced) TextOverflow.Ellipsis else TextOverflow.Clip,
                 )
                 val sub = listOf(m.artist, m.album).filter { it.isNotBlank() }.joinToString(" — ")
                 if (sub.isNotBlank()) Text(sub, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.titleMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -198,9 +210,11 @@ internal fun Player(m: NowPlaying, accent: Color = MaterialTheme.colorScheme.pri
                     onSeek = { f -> NowPlayingState.seekTo((f * m.durationMs).toLong()); dragging = null },
                     modifier = Modifier.padding(top = 24.dp).fillMaxWidth().height(36.dp),
                 )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(MediaProgress.clock((fraction * m.durationMs).toLong()), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
-                    Text("-" + MediaProgress.clock(((1f - fraction) * m.durationMs).toLong()), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                // Tabular figures, so the clocks hold still while the seconds tick.
+                val clockStyle = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
+                Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(MediaProgress.clock((fraction * m.durationMs).toLong()), style = clockStyle, color = scheme.onSurfaceVariant)
+                    Text("\u2212" + MediaProgress.clock(((1f - fraction) * m.durationMs).toLong()), style = clockStyle, color = scheme.onSurfaceVariant)
                 }
             } else Spacer(Modifier.height(24.dp))
             Row(Modifier.padding(top = 20.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -219,9 +233,11 @@ private fun PlayButton(playing: Boolean, accent: Color) {
     val motion = LocalMotion.current
     val corner by animateDpAsState(if (playing) 28.dp else 44.dp, motion.spring(1f), label = "playCorner")
     val onAccent = if (accent.luminance() > 0.5f) Color.Black else Color.White
+    val press = remember { MutableInteractionSource() }
     Box(
-        Modifier.size(88.dp).clip(RoundedCornerShape(corner)).background(accent)
-            .clickable(role = Role.Button, onClickLabel = if (playing) "Pause" else "Play") { NowPlayingState.playPause() },
+        Modifier.pressFeedback(press).size(88.dp).clip(RoundedCornerShape(corner)).background(accent)
+            .clickable(press, LocalIndication.current, role = Role.Button, onClickLabel = if (playing) "Pause" else "Play") { NowPlayingState.playPause() }
+            .semantics { contentDescription = if (playing) "Pause" else "Play" },
         contentAlignment = Alignment.Center,
     ) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, tint = onAccent, modifier = Modifier.size(42.dp)) }
 }
@@ -229,8 +245,10 @@ private fun PlayButton(playing: Boolean, accent: Color) {
 @Composable
 private fun Transport(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
     Box(
-        Modifier.size(64.dp).clip(CircleShape).background(scheme.surfaceContainerHigh.copy(alpha = 0.8f)).clickable(role = Role.Button, onClickLabel = description, onClick = onClick),
+        Modifier.pressFeedback(press).size(64.dp).clip(CircleShape).background(scheme.surfaceContainerHigh.copy(alpha = 0.8f))
+            .clickable(press, LocalIndication.current, role = Role.Button, onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Icon(icon, description, tint = scheme.onSurface, modifier = Modifier.size(30.dp)) }
 }

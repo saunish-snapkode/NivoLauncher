@@ -4,6 +4,19 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.text.style.TextOverflow
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,7 +115,10 @@ fun ActivityLogScreen(onBack: () -> Unit, iconFor: (String?) -> ImageBitmap?) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                Text("Activity log", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                Text(
+                    "Activity log", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
                 IconButton(onClick = {
                     val d = day
                     if (d != null) export.launch("nivo-activity-" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(Date(d.dayStartMs)) + ".csv")
@@ -113,22 +129,35 @@ fun ActivityLogScreen(onBack: () -> Unit, iconFor: (String?) -> ImageBitmap?) {
                 IconButton(onClick = { daysAgo++ }, enabled = daysAgo < DAYS_BACK) { Icon(Icons.Filled.ChevronLeft, "Previous day") }
                 Text(
                     ActivityLog.dayTitle(day?.dayStartMs ?: now, now), style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.width(160.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    // Announced when the day changes, so stepping through days with a screen reader says where you are.
+                    modifier = Modifier.weight(1f, fill = false).widthIn(min = 160.dp).padding(horizontal = NivoSpace.s).semantics { liveRegion = LiveRegionMode.Polite },
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
                 IconButton(onClick = { daysAgo-- }, enabled = daysAgo > 0) { Icon(Icons.Filled.ChevronRight, "Next day") }
             }
             val d = day
             if (d == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Reading the day…", color = scheme.onSurfaceVariant) }
+                Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    CircularProgressIndicator(Modifier.size(32.dp), strokeWidth = 3.dp)
+                    Text(
+                        "Reading the day…", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = NivoSpace.l),
+                    )
+                }
                 return@Column
             }
             // Summary.
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.m), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                 Summary("Screen time", SkyInsight.formatMin(d.totalMinutes).replace(" min", "m"), Modifier.weight(1f))
                 Summary("Unlocks", d.unlocks.toString(), Modifier.weight(1f))
                 Summary("App sessions", d.appSessions.size.toString(), Modifier.weight(1f))
             }
-            Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Scrolls sideways rather than squeezing the chips when the text is large.
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = NivoSpace.xl),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.s),
+            ) {
                 ActivityFilter.entries.forEach { f ->
                     FilterChip(
                         selected = filter == f, onClick = { filter = f }, label = { Text(f.label) },
@@ -139,23 +168,23 @@ fun ActivityLogScreen(onBack: () -> Unit, iconFor: (String?) -> ImageBitmap?) {
             val groups = remember(d, filter) { ActivityLog.byHour(ActivityLog.entries(d, filter)) }
             if (groups.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text(
+                    EmptyState(
+                        Icons.Outlined.History, "A quiet day",
                         when (filter) {
                             ActivityFilter.All -> "Nothing recorded for this day."
                             ActivityFilter.Unlocks -> "No unlocks recorded for this day."
                             ActivityFilter.AppUse -> "No app use recorded for this day."
                         },
-                        color = scheme.onSurfaceVariant,
                     )
                 }
-            } else LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp, vertical = 12.dp)) {
+            } else LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = NivoSpace.xl, vertical = NivoSpace.m)) {
                 groups.forEach { (hour, entries) ->
                     items(entries.size, key = { "$hour-$it" }) { i ->
                         TimelineRow(entries[i], showHour = i == 0, hour = hour, last = i == entries.lastIndex, label = ::label, iconFor = iconFor)
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = NivoSpace.xl, end = NivoSpace.m, top = NivoSpace.s, bottom = NivoSpace.s), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Stored only on this phone. Android keeps about a week of usage.",
                     style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f),
@@ -168,9 +197,17 @@ fun ActivityLogScreen(onBack: () -> Unit, iconFor: (String?) -> ImageBitmap?) {
 
 @Composable
 private fun Summary(label: String, value: String, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(12.dp)) {
-        Text(value, style = MaterialTheme.typography.titleLarge)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(NivoRadius.control)
+    Column(
+        modifier.clip(shape).background(scheme.surfaceContainer).border(1.dp, scheme.outlineVariant, shape)
+            .semantics(mergeDescendants = true) {}.padding(NivoSpace.m),
+    ) {
+        Text(
+            value, style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"), color = scheme.onSurface,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -185,11 +222,15 @@ private fun TimelineRow(
         is ActivityEntry.ScreenOff -> "Screen off"
         is ActivityEntry.AppUse -> label(e.pkg)
     }
+    val minutes = if (e is ActivityEntry.AppUse) SkyInsight.formatMin(((e.durationMs + 59_999L) / 60_000L).toInt()) else null
     Row(
         Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)
-            .semantics(mergeDescendants = true) { contentDescription = "$time, $text" },
+            .clearAndSetSemantics { contentDescription = "$time, $text" + (minutes?.let { ", $it" } ?: "") },
     ) {
-        Text(time, style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, modifier = Modifier.width(52.dp).padding(top = 14.dp))
+        Text(
+            time, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), color = scheme.onSurfaceVariant,
+            maxLines = 1, modifier = Modifier.width(52.dp).padding(top = 14.dp),
+        )
         // The rail and its node.
         Box(Modifier.width(24.dp).fillMaxSize(), contentAlignment = Alignment.TopCenter) {
             Box(Modifier.width(2.dp).fillMaxSize().background(scheme.outlineVariant.copy(alpha = if (last) 0f else 1f)))
@@ -206,12 +247,13 @@ private fun TimelineRow(
                     Icon(if (e is ActivityEntry.Unlock) Icons.Outlined.LockOpen else Icons.Outlined.PowerSettingsNew, null, Modifier.size(18.dp), tint = scheme.onSurfaceVariant)
                 }
             }
-            Spacer(Modifier.width(12.dp))
-            Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1)
-            if (e is ActivityEntry.AppUse) {
+            Spacer(Modifier.width(NivoSpace.m))
+            Text(text, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (minutes != null) {
+                Spacer(Modifier.width(NivoSpace.s))
                 Text(
-                    SkyInsight.formatMin(((e.durationMs + 59_999L) / 60_000L).toInt()), style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.clip(CircleShape).background(scheme.secondaryContainer).padding(horizontal = 10.dp, vertical = 4.dp),
+                    minutes, style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"), color = scheme.onSecondaryContainer, maxLines = 1,
+                    modifier = Modifier.clip(CircleShape).background(scheme.secondaryContainer).padding(horizontal = 10.dp, vertical = NivoSpace.xs),
                 )
             }
         }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -234,21 +236,34 @@ fun PageletContentLayer(
 @Composable
 fun PageletUndoPill(visible: Boolean, onUndo: () -> Unit, onExpire: () -> Unit, modifier: Modifier = Modifier) {
     LaunchedEffect(visible) { if (visible) { kotlinx.coroutines.delay(6000); onExpire() } }
-    androidx.compose.animation.AnimatedVisibility(visible, modifier = modifier, enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut()) {
+    val motion = LocalMotion.current
+    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    // Rises into place from just below; under reduced motion it only fades, and quickly.
+    val enter = if (motion.reduced) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(motion.duration(220)))
+    else androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) +
+        androidx.compose.animation.slideInVertically(motion.spring(1f)) { it / 2 }
+    val exit = if (motion.reduced) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(motion.duration(180)))
+    else androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180)) +
+        androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(180)) { it / 2 }
+    androidx.compose.animation.AnimatedVisibility(visible, modifier = modifier, enter = enter, exit = exit) {
         androidx.compose.material3.Surface(
             // Announced by a screen reader as it appears, so Undo isn't missed.
             modifier = Modifier.semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
             shape = androidx.compose.foundation.shape.CircleShape,
-            color = androidx.compose.material3.MaterialTheme.colorScheme.inverseSurface,
-            shadowElevation = 6.dp,
+            color = scheme.inverseSurface,
+            shadowElevation = com.snapkode.nivolauncher.ui.design.NivoElevation.modal,
         ) {
             androidx.compose.foundation.layout.Row(
-                Modifier.padding(start = 20.dp, end = 8.dp),
+                Modifier.heightIn(min = com.snapkode.nivolauncher.ui.design.NivoTouch.min).padding(start = 20.dp, end = 6.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
-                androidx.compose.material3.Text("Pagelet removed", color = androidx.compose.material3.MaterialTheme.colorScheme.inverseOnSurface)
+                androidx.compose.material3.Text(
+                    "Pagelet removed", color = scheme.inverseOnSurface, maxLines = 1,
+                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                )
+                androidx.compose.foundation.layout.Spacer(Modifier.width(com.snapkode.nivolauncher.ui.design.NivoSpace.xs))
                 androidx.compose.material3.TextButton(onClick = onUndo) {
-                    androidx.compose.material3.Text("Undo", color = androidx.compose.material3.MaterialTheme.colorScheme.inversePrimary)
+                    androidx.compose.material3.Text("Undo", color = scheme.inversePrimary, maxLines = 1)
                 }
             }
         }

@@ -8,6 +8,25 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.semantics.contentDescription
@@ -73,21 +92,38 @@ private fun rememberResumeCounter(): Int {
 }
 
 @Composable
-private fun PermissionCard(title: String, body: String, granted: Boolean, grantedBody: String, actionLabel: String, onAction: () -> Unit) {
+private fun PermissionCard(
+    title: String, body: String, granted: Boolean, grantedBody: String, actionLabel: String,
+    icon: ImageVector = Icons.Outlined.Lock, onAction: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     Surface(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
-        shape = RoundedCornerShape(20.dp), color = scheme.surfaceContainerHigh, border = BorderStroke(1.dp, scheme.outlineVariant),
+        Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.xs),
+        shape = RoundedCornerShape(NivoRadius.card), color = scheme.surfaceContainerHigh, border = BorderStroke(1.dp, scheme.outlineVariant),
     ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(if (granted) grantedBody else body, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        Row(Modifier.padding(NivoSpace.l), verticalAlignment = Alignment.CenterVertically) {
+            // A tonal badge: the accent while something is asked, a calm check once it is allowed.
+            Box(
+                Modifier.size(40.dp).background(if (granted) scheme.primaryContainer else scheme.secondaryContainer, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    if (granted) Icons.Filled.Check else icon, null, Modifier.size(20.dp),
+                    tint = if (granted) scheme.onPrimaryContainer else scheme.onSecondaryContainer,
+                )
             }
-            if (!granted) {
-                Spacer(Modifier.width(12.dp))
-                OutlinedButton(onClick = onAction) { Text(actionLabel) }
-            } else Icon(Icons.Filled.Check, null, tint = scheme.primary)
+            Spacer(Modifier.width(NivoSpace.m))
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
+                Text(
+                    if (granted) grantedBody else body, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = NivoSpace.xxs),
+                )
+            }
+            if (!granted && actionLabel.isNotEmpty()) {
+                Spacer(Modifier.width(NivoSpace.m))
+                FilledTonalButton(onClick = onAction, modifier = Modifier.heightIn(min = NivoTouch.min)) { Text(actionLabel, maxLines = 1) }
+            }
         }
     }
 }
@@ -102,6 +138,7 @@ fun UsageAccessCard() {
         if (granted) "Usage access allowed" else "Usage access needed",
         "Wellbeing reads screen time on this phone. Nothing leaves your device. In Settings, find Nivo Launcher and switch it on.",
         granted, "Wellbeing can read screen time on this phone. Nothing leaves your device.", "Allow",
+        icon = Icons.Outlined.Timer,
     ) { UsageAccess.open(context) }
 }
 
@@ -118,6 +155,7 @@ fun CalendarAccessCard(onChanged: () -> Unit = {}) {
         if (granted) "Calendar allowed" else "Calendar access needed",
         "The Today page shows what is next in your calendars. It only reads, and nothing leaves your device.",
         granted, "Today shows what is next in your calendars. Read-only.", if (refusedOnce) "Open settings" else "Allow",
+        icon = Icons.Outlined.CalendarMonth,
     ) { if (refusedOnce) openAppSettings(context) else ask.launch(Manifest.permission.READ_CALENDAR) }
 }
 
@@ -134,13 +172,14 @@ fun StepsAccessCard(onChanged: () -> Unit = {}) {
     }
     val unsupported = status == HealthConnectClient.SDK_UNAVAILABLE && android.os.Build.VERSION.SDK_INT >= 34
     when {
-        unsupported -> PermissionCard("Steps unavailable", "This phone can't read steps from Health Connect.", false, "", "") {}
+        unsupported -> PermissionCard("Steps unavailable", "This phone can't read steps from Health Connect.", false, "", "", icon = Icons.Outlined.Block) {}
         status == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED || (status == HealthConnectClient.SDK_UNAVAILABLE) ->
-            PermissionCard("Health Connect needed", "Steps come from Health Connect, which isn't installed on this phone.", false, "", "Get it") { openHealthConnectStore(context) }
+            PermissionCard("Health Connect needed", "Steps come from Health Connect, which isn't installed on this phone.", false, "", "Get it", icon = Icons.Outlined.FileDownload) { openHealthConnectStore(context) }
         else -> PermissionCard(
             if (granted) "Steps allowed" else "Steps access needed",
             "The Today page shows your steps from Health Connect. Read-only; nothing leaves your device.",
             granted, "Today shows your steps from Health Connect. Read-only.", "Allow",
+            icon = Icons.Filled.DirectionsWalk,
         ) { ask.launch(StepsSource.permissions) }
     }
 }
@@ -148,16 +187,25 @@ fun StepsAccessCard(onChanged: () -> Unit = {}) {
 /** A "− value +" row for a goal. */
 @Composable
 fun GoalStepper(label: String, value: String, onMinus: () -> Unit, onPlus: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = NivoSpace.m)) {
             Text(label, style = MaterialTheme.typography.titleSmall)
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                value, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // The new value is read out after each tap.
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val size = Modifier.size(width = 64.dp, height = 48.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
+            val size = Modifier.size(width = 64.dp, height = NivoTouch.min)
             val pad = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            OutlinedButton(onClick = onMinus, modifier = size.semantics { contentDescription = "Decrease $label" }, contentPadding = pad) { Text("−", style = MaterialTheme.typography.titleMedium) }
-            OutlinedButton(onClick = onPlus, modifier = size.semantics { contentDescription = "Increase $label" }, contentPadding = pad) { Text("+", style = MaterialTheme.typography.titleMedium) }
+            OutlinedButton(onClick = onMinus, modifier = size.semantics { contentDescription = "Decrease $label" }, contentPadding = pad) {
+                Icon(Icons.Filled.Remove, null, Modifier.size(20.dp))
+            }
+            OutlinedButton(onClick = onPlus, modifier = size.semantics { contentDescription = "Increase $label" }, contentPadding = pad) {
+                Icon(Icons.Filled.Add, null, Modifier.size(20.dp))
+            }
         }
     }
 }
