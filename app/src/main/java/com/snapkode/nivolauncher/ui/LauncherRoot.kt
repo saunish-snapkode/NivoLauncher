@@ -6,6 +6,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -77,10 +81,14 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         HomeScreen(viewModel, drawer, onOpenSettings = { route -> settingsRoute = route; showSettings = true }, barsOwnedElsewhere = showSettings || !settings.onboarded)
         CompositionLocalProvider(LocalLabelSize provides settings.drawerLabelSize) { AppDrawer(viewModel, drawer) }
         SelectionBar(viewModel, selection, drawer)
+        // Settings glide in from the side and settle without overshoot (no wallpaper sliver at the edge); with reduced
+        // motion they only cross-fade.
         AnimatedVisibility(
             visible = showSettings,
-            enter = fadeIn() + slideInHorizontally { it / 5 },
-            exit = fadeOut() + slideOutHorizontally { it / 5 },
+            enter = if (motion.reduced) fadeIn(tween(motion.duration(220)))
+            else fadeIn(tween(220)) + slideInHorizontally(tween<IntOffset>(300, easing = FastOutSlowInEasing)) { it / 5 },
+            exit = if (motion.reduced) fadeOut(tween(motion.duration(180)))
+            else fadeOut(tween(180)) + slideOutHorizontally(tween<IntOffset>(200, easing = FastOutLinearInEasing)) { it / 5 },
         ) { SettingsScreen(viewModel, initialRoute = settingsRoute, onClose = { showSettings = false }) }
         if (!settings.onboarded) OnboardingFlow(viewModel)
         // A cold start reads every installed app first; the mark breathes until that is done, then fades away.
@@ -88,7 +96,7 @@ fun LauncherRoot(viewModel: LauncherViewModel) {
         androidx.compose.animation.AnimatedVisibility(
             visible = !ready,
             enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(0)),
-            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(350)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(motion.duration(350))),
         ) {
             com.snapkode.nivolauncher.ui.design.NivoLoadingScreen(dark = androidx.compose.foundation.isSystemInDarkTheme())
         }

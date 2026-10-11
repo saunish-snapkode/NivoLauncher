@@ -30,6 +30,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -87,26 +91,41 @@ fun NivoClock(settings: LauncherSettings, modifier: Modifier = Modifier) {
     val accent = if (color == Color.White) hsl(hueOf(scheme.primary), 1f, 0.83f) else scheme.primary
     val shadow = if (color == Color.White) Shadow(Color(0x66000000), Offset(0f, 3f), 10f) else null
     val family = LocalAppFont.current ?: FontFamily.SansSerif
+    // Tabular figures: every digit is the same width, so the numerals never shuffle sideways as the time ticks over.
     fun style(size: Int, weight: FontWeight, tracking: Double = 0.0, c: Color = color, line: Double = 1.05) =
-        TextStyle(fontFamily = family, fontSize = size.sp, fontWeight = weight, letterSpacing = tracking.sp, color = c, shadow = shadow, lineHeight = (size * line).sp)
+        TextStyle(
+            fontFamily = family, fontSize = size.sp, fontWeight = weight, letterSpacing = tracking.sp, color = c,
+            shadow = shadow, lineHeight = (size * line).sp, fontFeatureSettings = "tnum",
+        )
+    // One spoken sentence for the whole clock (no seconds, so it doesn't change under a screen reader every tick).
+    val spoken = buildString {
+        if (settings.clockGreeting) append(greeting(now)).append(", ")
+        append(SimpleDateFormat(if (is24) "HH:mm" else "h:mm a", Locale.getDefault()).format(date))
+        append(", ").append(dateLine)
+    }
 
     val hh = time.substringBefore(':')
     val rest = time.substringAfter(':')
     val mm = rest.take(2)
     val tail = rest.drop(2) // ":ss" when seconds are on
 
-    Column(modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp)) {
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = NivoSpace.xl, vertical = NivoSpace.xs)
+            .clearAndSetSemantics { contentDescription = spoken },
+    ) {
         if (settings.clockGreeting) {
-            Text(greeting(now), style = style(15, FontWeight.Medium, 0.4, color.copy(alpha = 0.85f)))
+            Text(greeting(now), style = style(15, FontWeight.Medium, 0.4, color.copy(alpha = 0.85f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         when (settings.clockStyle) {
             ClockStyle.Hero -> {
                 // Stacked numerals: heavy hours in the seed colour over hairline minutes.
                 val size = (128 * clockCap).toInt()
-                Text(hh, style = style(size, FontWeight(600), -4.0, accent, 0.86), modifier = Modifier.padding(top = 4.dp))
+                Text(hh, style = style(size, FontWeight(600), -4.0, accent, 0.86), maxLines = 1, modifier = Modifier.padding(top = NivoSpace.xs))
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(mm + tail, style = style(size, FontWeight.Thin, -4.0, color, 0.86))
-                    if (meridiem.isNotEmpty()) Text(meridiem, style = style(18, FontWeight.Medium, 0.0, color.copy(alpha = 0.8f)), modifier = Modifier.padding(start = 8.dp, bottom = 28.dp))
+                    if (meridiem.isNotEmpty()) Text(meridiem, style = style(18, FontWeight.Medium, 0.0, color.copy(alpha = 0.8f)), maxLines = 1, modifier = Modifier.padding(start = NivoSpace.s, bottom = 28.dp))
                 }
             }
             ClockStyle.Minimal -> {
@@ -115,9 +134,9 @@ fun NivoClock(settings: LauncherSettings, modifier: Modifier = Modifier) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp)
-                        .background(scheme.primaryContainer, androidx.compose.foundation.shape.RoundedCornerShape(percent = 50))
-                        .padding(vertical = 14.dp),
+                        .padding(vertical = NivoSpace.s)
+                        .background(scheme.primaryContainer, NivoShapes.Pill)
+                        .padding(vertical = NivoSpace.m),
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -129,7 +148,10 @@ fun NivoClock(settings: LauncherSettings, modifier: Modifier = Modifier) {
                 }
             }
             ClockStyle.Compact -> {
-                Text("$time${if (meridiem.isNotEmpty()) " $meridiem" else ""}  ·  $shortDate", style = style(22, FontWeight.Normal, 0.0))
+                Text(
+                    "$time${if (meridiem.isNotEmpty()) " $meridiem" else ""}  ·  $shortDate",
+                    style = style(22, FontWeight.Normal, 0.0), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
             }
             ClockStyle.Analog -> {
                 AnalogFace(now, settings.clockSeconds, scheme, Modifier.size(148.dp))
@@ -137,7 +159,10 @@ fun NivoClock(settings: LauncherSettings, modifier: Modifier = Modifier) {
             ClockStyle.Off -> Unit
         }
         if (settings.clockStyle != ClockStyle.Compact && !settings.smartspace) {
-            Text(dateLine, style = style(24, FontWeight.Normal, 0.0, color), modifier = Modifier.padding(top = 4.dp))
+            Text(
+                dateLine, style = style(24, FontWeight.Normal, 0.0, color), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = NivoSpace.xs),
+            )
         }
     }
 }

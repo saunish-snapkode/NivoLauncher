@@ -67,6 +67,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.snapkode.nivolauncher.data.ClockWeight
 import com.snapkode.nivolauncher.ui.DigitGlyphs.ASPECT
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.text.style.TextOverflow
+import com.snapkode.nivolauncher.ui.design.LocalMotion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -113,11 +121,21 @@ fun NivoClockWidget(weight: ClockWeight, onTap: () -> Unit, modifier: Modifier =
         SimpleDateFormat("EEEE · d MMMM", Locale.getDefault()).format(Date(now)).uppercase(Locale.getDefault())
     }
     val textShadow = Shadow(Color(0x55000000), Offset(0f, 2f), 8f)
+    // The digits are drawn, not written, so a screen reader is given the time (to the minute) and the tap as an action.
+    val spoken = remember(now / 60_000L, is24) {
+        SimpleDateFormat(if (is24) "HH:mm, EEEE d MMMM" else "h:mm a, EEEE d MMMM", Locale.getDefault()).format(Date(now))
+    }
+    val currentOnTap by rememberUpdatedState(onTap)
 
     BoxWithConstraints(
         modifier
             .fillMaxSize()
-            .pointerInput(Unit) { detectTapGestures(onTap = { onTap() }) },
+            .clearAndSetSemantics {
+                contentDescription = "Clock, $spoken"
+                role = Role.Button
+                onClick(label = "Open alarms") { currentOnTap(); true }
+            }
+            .pointerInput(Unit) { detectTapGestures(onTap = { currentOnTap() }) },
     ) {
         val compact = maxHeight < 118.dp
         val padding = if (compact) 8.dp else 12.dp
@@ -141,7 +159,7 @@ fun NivoClockWidget(weight: ClockWeight, onTap: () -> Unit, modifier: Modifier =
                 Spacer(Modifier.weight(1f))
                 Column(horizontalAlignment = Alignment.End) {
                     if (meridiem.isNotEmpty()) Meridiem(meridiem, ink)
-                    Text(dateText.substringBefore(" ·"), style = dateStyle, color = ink.copy(alpha = 0.85f), maxLines = 1)
+                    Text(dateText.substringBefore(" ·"), style = dateStyle, color = ink.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         } else {
@@ -149,7 +167,7 @@ fun NivoClockWidget(weight: ClockWeight, onTap: () -> Unit, modifier: Modifier =
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(6.dp).clip(CircleShape).drawBehind { drawRect(ink) })
                     Text(
-                        dateText, style = dateStyle, color = ink.copy(alpha = 0.85f), maxLines = 1,
+                        dateText, style = dateStyle, color = ink.copy(alpha = 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(start = 10.dp, end = 8.dp).weight(1f),
                     )
                     if (meridiem.isNotEmpty()) Meridiem(meridiem, ink)
@@ -190,18 +208,22 @@ private fun MorphDigit(digit: Int?, height: Dp, strokeWidth: Dp, color: Color) {
     var to by remember { mutableStateOf(initial) }
     val morph = remember { Animatable(1f) }
     val shown = remember { Animatable(if (digit == null) 0f else 1f) }
+    val motion = LocalMotion.current
 
     LaunchedEffect(digit) {
+        val fold = tween<Float>(motion.duration(420), easing = FastOutSlowInEasing)
         if (digit == null) {
-            shown.animateTo(0f, tween(420, easing = FastOutSlowInEasing))
+            shown.animateTo(0f, fold)
         } else {
-            launch { shown.animateTo(1f, tween(420, easing = FastOutSlowInEasing)) }
+            launch { shown.animateTo(1f, fold) }
             val target = DigitGlyphs.points[digit]
             if (target !== to) {
                 from = DigitGlyphs.blend(from, to, morph.value.coerceIn(0f, 1f))
                 to = target
                 morph.snapTo(0f)
-                morph.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 110f))
+                // Reduced motion: a short, flat blend instead of the slow springy bend.
+                if (motion.reduced) morph.animateTo(1f, tween(motion.duration(420), easing = FastOutSlowInEasing))
+                else morph.animateTo(1f, spring(dampingRatio = 0.86f, stiffness = 110f))
             }
         }
     }
@@ -246,7 +268,10 @@ private fun MorphDigit(digit: Int?, height: Dp, strokeWidth: Dp, color: Color) {
 private fun Colon(color: Color, digitH: Dp, strokeW: Dp, second: Int) {
     // One short breath per second tick, then still: an endless animation kept the whole launcher drawing every frame.
     val breath = remember { androidx.compose.animation.core.Animatable(1f) }
-    LaunchedEffect(second) {
+    val reduced = LocalMotion.current.reduced
+    LaunchedEffect(second, reduced) {
+        // Reduced motion: the colon simply stays lit.
+        if (reduced) { breath.snapTo(1f); return@LaunchedEffect }
         breath.animateTo(0.35f, tween(220, easing = FastOutSlowInEasing))
         breath.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
     }
@@ -274,6 +299,7 @@ private fun Meridiem(text: String, ink: Color) {
             .clip(RoundedCornerShape(50))
             .border(1.dp, ink.copy(alpha = 0.55f), RoundedCornerShape(50))
             .padding(horizontal = 10.dp, vertical = 3.dp),
+        maxLines = 1,
     )
 }
 

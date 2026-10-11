@@ -56,6 +56,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.AppInfo
 import com.snapkode.nivolauncher.data.HomeFolder
@@ -116,24 +124,32 @@ fun FolderIconView(
             Column(Modifier.align(Alignment.Center), verticalArrangement = Arrangement.spacedBy(tile / 16)) {
                 preview.chunked(2).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(tile / 16)) {
-                        row.forEach { Image(it.icon, null, Modifier.size(tile * 0.4f)) }
+                        row.forEach { Image(it.icon, contentDescription = null, modifier = Modifier.size(tile * 0.4f)) }
                     }
                 }
             }
         }
         if (showLabel) {
+            // Same sizing rules as app labels, so a folder never reads larger or smaller than its neighbours.
+            val fontScale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+            val bigFont = fontScale > 1.3f
+            val labelCap = if (fontScale > 1.5f) 1.5f / fontScale else 1f
+            val labelSize = LocalLabelSize.current * labelCap
+            val homeInk = LocalHomeTextColor.current
             Text(
                 folder.name,
-                maxLines = 1,
+                maxLines = if (bigFont) maxOf(2, LocalLabelLines.current) else LocalLabelLines.current,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = LocalLabelSize.current.sp,
-                color = if (onWallpaper) LocalHomeTextColor.current else MaterialTheme.colorScheme.onSurface,
+                fontSize = labelSize.sp,
+                lineHeight = (labelSize * 1.2f).sp,
+                color = if (onWallpaper) homeInk else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
                 style = TextStyle(
-                    shadow = androidx.compose.ui.graphics.Shadow(Color(0x99000000), androidx.compose.ui.geometry.Offset(0f, 2f), 6f),
+                    // Only white text over the wallpaper needs the shadow; dark text or a solid surface reads cleaner without.
+                    shadow = if (onWallpaper && homeInk == Color.White) HomeLabelShadow else null,
                     fontFamily = LocalAppFont.current,
                 ),
-                modifier = Modifier.width((64 * scale).dp.coerceAtLeast(56.dp)),
+                modifier = Modifier.width(((if (bigFont) 80 else 64) * scale).dp.coerceAtLeast(56.dp)),
             )
         }
     }
@@ -167,7 +183,7 @@ internal fun FolderPopup(
     val hapticsOn = com.snapkode.nivolauncher.ui.design.LocalHapticsEnabled.current
     var wasInside by remember { mutableStateOf(true) }
     val insideCard = surfaceBounds?.contains(drag.pos) == true
-    val visible by animateFloatAsState(if (draggingOut && !insideCard) 0f else 1f, androidx.compose.animation.core.tween(150), label = "folderVisible")
+    val visible by animateFloatAsState(if (draggingOut && !insideCard) 0f else 1f, androidx.compose.animation.core.tween(motion.duration(150)), label = "folderVisible")
     LaunchedEffect(insideCard, draggingOut) {
         if (draggingOut && insideCard != wasInside && hapticsOn) {
             haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
@@ -182,6 +198,7 @@ internal fun FolderPopup(
         }
     }
     BackHandler(onBack = ::close)
+    val titleFocus = remember { FocusRequester() }
     Box(Modifier.fillMaxSize()) {
     Box(
         Modifier
@@ -194,7 +211,7 @@ internal fun FolderPopup(
         Surface(
             onClick = {},
             modifier = Modifier
-                .padding(24.dp)
+                .padding(NivoSpace.xl)
                 .onGloballyPositioned { surfaceBounds = it.boundsInRoot(); drag.folderBounds = surfaceBounds }
                 .graphicsLayer {
                     val target = surfaceBounds
@@ -218,39 +235,69 @@ internal fun FolderPopup(
             shape = RoundedCornerShape(36.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.folderBgOpacity),
         ) {
-            Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                // The title sits in a tonal pill with a pencil, hinting that it can be renamed in place.
+            Column(Modifier.padding(NivoSpace.l), horizontalAlignment = Alignment.CenterHorizontally) {
+                // The title sits in a tonal pill with a pencil, hinting that it can be renamed in place. The whole pill
+                // (pencil included) puts the cursor in the name, not just the text itself.
+                val titleStyle = MaterialTheme.typography.titleLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
                 Row(
                     Modifier
-                        .padding(bottom = 16.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, androidx.compose.foundation.shape.CircleShape)
-                        .padding(horizontal = 28.dp, vertical = 14.dp),
+                        .padding(bottom = NivoSpace.l)
+                        .clip(androidx.compose.foundation.shape.CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .clickable(onClickLabel = "Rename folder") { titleFocus.requestFocus() }
+                        .heightIn(min = NivoTouch.min)
+                        .padding(horizontal = NivoSpace.xl, vertical = NivoSpace.m),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     BasicTextField(
                         value = name,
                         onValueChange = { name = it.take(24) },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.titleLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                        ),
+                        textStyle = titleStyle,
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Words,
+                            imeAction = ImeAction.Done,
+                        ),
                         keyboardActions = KeyboardActions(onDone = { close() }),
-                        modifier = Modifier.widthIn(min = 96.dp, max = 220.dp),
+                        modifier = Modifier
+                            .widthIn(min = 96.dp, max = 220.dp)
+                            .focusRequester(titleFocus)
+                            .semantics { contentDescription = "Folder name" },
+                        decorationBox = { inner ->
+                            Box(contentAlignment = Alignment.Center) {
+                                // A cleared name shows what it will fall back to, instead of an empty pill.
+                                if (name.isEmpty()) {
+                                    Text("Folder", style = titleStyle.copy(color = MaterialTheme.colorScheme.onSurfaceVariant), maxLines = 1)
+                                }
+                                inner()
+                            }
+                        },
                     )
                     androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Outlined.Edit, null,
+                        androidx.compose.material.icons.Icons.Outlined.Edit, contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 16.dp).size(20.dp),
+                        modifier = Modifier.padding(start = NivoSpace.m).size(20.dp),
                     )
                 }
-                LazyVerticalGrid(
+                val folderApps = folder.appIds.mapNotNull(appsById::get)
+                if (folderApps.isEmpty()) {
+                    // Every app in it was uninstalled (or is still loading): say so rather than showing a blank card.
+                    Text(
+                        "No apps in this folder yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = NivoSpace.xl, vertical = NivoSpace.xxl),
+                    )
+                } else LazyVerticalGrid(
                     columns = GridCells.Fixed(settings.folderColumns),
                     modifier = Modifier.heightIn(max = 420.dp),
                 ) {
-                    itemsIndexed(folder.appIds.mapNotNull(appsById::get), key = { _, app -> app.id }) { index, app ->
+                    itemsIndexed(folderApps, key = { _, app -> app.id }) { index, app ->
                         FolderCell(app, folder, viewModel, drag, scale, settings.showFolderLabels, index)
                     }
                 }
@@ -294,7 +341,7 @@ private fun FolderCell(
         drag = drag,
         fromFolder = folder.id,
         description = app.label,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).graphicsLayer {
+        modifier = Modifier.fillMaxWidth().padding(vertical = NivoSpace.s).graphicsLayer {
             val a = appear.value
             alpha = a.coerceIn(0f, 1f)
             val sc = 0.6f + 0.4f * a
