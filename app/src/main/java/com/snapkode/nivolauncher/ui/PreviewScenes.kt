@@ -50,6 +50,22 @@ import com.snapkode.nivolauncher.data.DrawerSort
 import com.snapkode.nivolauncher.data.GestureAction
 import com.snapkode.nivolauncher.data.HomeFolder
 import com.snapkode.nivolauncher.data.LauncherSettings
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.style.TextOverflow
 
 private const val VIRTUAL_W = 360
 private const val VIRTUAL_H = 640
@@ -62,11 +78,15 @@ private const val VIRTUAL_H = 640
 fun PhonePreview(height: Dp, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
     val width = height * VIRTUAL_W / VIRTUAL_H
     val scale = height.value / VIRTUAL_H
+    // Corner radius follows the preview's size so small previews keep a phone's proportions.
+    val bezel = RoundedCornerShape(height * 0.11f)
     Box(
         modifier
             .size(width, height)
-            .clip(RoundedCornerShape(36.dp))
-            .border(3.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(36.dp))
+            // A picture, not a control: screen readers hear one label instead of every mock icon inside.
+            .clearAndSetSemantics { contentDescription = "Preview" }
+            .clip(bezel)
+            .border(3.dp, MaterialTheme.colorScheme.outlineVariant, bezel)
             .clipToBounds()
     ) {
         Box(
@@ -97,7 +117,7 @@ private fun SearchPill(text: String, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Default.Search, null, tint = Color.White)
-        Text(text, color = Color.White.copy(alpha = 0.85f), modifier = Modifier.padding(start = 12.dp), fontSize = 14.sp)
+        Text(text, color = Color.White.copy(alpha = 0.85f), modifier = Modifier.padding(start = NivoSpace.m), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -183,7 +203,7 @@ fun DrawerPreview(settings: LauncherSettings, apps: List<AppInfo>, height: Dp = 
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Default.Search, null)
-                    Text("Search apps", modifier = Modifier.padding(start = 12.dp), fontSize = 14.sp)
+                    Text("Search apps", modifier = Modifier.padding(start = NivoSpace.m), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
             }
             Box(Modifier.weight(1f)) {
@@ -197,7 +217,7 @@ fun DrawerPreview(settings: LauncherSettings, apps: List<AppInfo>, height: Dp = 
                                 apps.getOrNull(r)?.let {
                                     Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = settings.drawerCellPadding.dp / 2), verticalAlignment = Alignment.CenterVertically) {
                                         androidx.compose.foundation.Image(it.icon, null, Modifier.size((40 * settings.drawerIconScale).dp))
-                                        Text(it.label, modifier = Modifier.padding(start = 14.dp), fontSize = 15.sp)
+                                        Text(it.label, modifier = Modifier.padding(start = 14.dp), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -250,9 +270,9 @@ fun FolderPreview(settings: LauncherSettings, apps: List<AppInfo>, folder: HomeF
                 apps.getOrNull(1)?.let { AppIconView(it, settings.iconScale, settings.showLabels, onWallpaper = true) }
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = settings.folderBgOpacity)) {
-                    Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(folder.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
+                Surface(shape = RoundedCornerShape(NivoRadius.hero), color = MaterialTheme.colorScheme.surface.copy(alpha = settings.folderBgOpacity)) {
+                    Column(Modifier.padding(NivoSpace.l), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(folder.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = NivoSpace.s))
                         val shown = folder.appIds.mapNotNull(byId::get)
                         shown.chunked(settings.folderColumns).take(2).forEach { row ->
                             Row {
@@ -274,7 +294,7 @@ fun FolderPreview(settings: LauncherSettings, apps: List<AppInfo>, folder: HomeF
 @Composable
 fun IconsPreview(settings: LauncherSettings, apps: List<AppInfo>) {
     PreviewCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(NivoSpace.l), verticalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
             repeat(2) { r ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     repeat(5) { c ->
@@ -290,17 +310,17 @@ fun IconsPreview(settings: LauncherSettings, apps: List<AppInfo>) {
 @Composable
 fun ThemePreview() {
     PreviewCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Nivo Launcher", style = MaterialTheme.typography.headlineSmall)
-            Text("The quick brown fox jumps over the lazy dog", style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = {}) { Text("Primary") }
-                OutlinedButton(onClick = {}) { Text("Outline") }
+        Column(Modifier.padding(NivoSpace.l), verticalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
+            Text("Nivo Launcher", style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("The quick brown fox jumps over the lazy dog", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(NivoSpace.s), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = {}) { Text("Primary", maxLines = 1) }
+                OutlinedButton(onClick = {}) { Text("Outline", maxLines = 1) }
                 Switch(checked = true, onCheckedChange = null)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = true, onClick = {}, label = { Text("Selected") })
-                FilterChip(selected = false, onClick = {}, label = { Text("Chip") })
+            Row(horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
+                FilterChip(selected = true, onClick = {}, label = { Text("Selected", maxLines = 1) })
+                FilterChip(selected = false, onClick = {}, label = { Text("Chip", maxLines = 1) })
             }
         }
     }
@@ -310,24 +330,24 @@ fun ThemePreview() {
 @Composable
 fun GesturePreview(settings: LauncherSettings) {
     PreviewCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            GestureLine("↓", "Swipe down", settings.swipeDown)
-            GestureLine("↑", "Swipe up", settings.swipeUp)
-            GestureLine("👆👆", "Double tap", settings.doubleTap)
-            GestureLine("⌂", "Home button", settings.homePress)
+        Column(Modifier.padding(NivoSpace.l), verticalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
+            GestureLine(Icons.Filled.ArrowDownward, "Swipe down", settings.swipeDown)
+            GestureLine(Icons.Filled.ArrowUpward, "Swipe up", settings.swipeUp)
+            GestureLine(Icons.Filled.TouchApp, "Double tap", settings.doubleTap)
+            GestureLine(Icons.Filled.Home, "Home button", settings.homePress)
         }
     }
 }
 
 @Composable
-private fun GestureLine(glyph: String, name: String, action: GestureAction) {
+private fun GestureLine(icon: ImageVector, name: String, action: GestureAction) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-            Text(glyph, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Icon(icon, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
         }
-        Column(Modifier.padding(start = 12.dp)) {
-            Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(action.label, style = MaterialTheme.typography.bodyLarge)
+        Column(Modifier.padding(start = NivoSpace.m).weight(1f)) {
+            Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(action.label, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -336,29 +356,31 @@ private fun GestureLine(glyph: String, name: String, action: GestureAction) {
 @Composable
 fun SearchPreview(settings: LauncherSettings, apps: List<AppInfo>) {
     PreviewCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(NivoSpace.l), verticalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
             Row(
-                Modifier.fillMaxWidth().height(44.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape).padding(horizontal = 16.dp),
+                Modifier.fillMaxWidth().height(NivoSpace.xxxl).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape).padding(horizontal = NivoSpace.l),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Search, null)
-                Text("wifi", modifier = Modifier.padding(start = 12.dp))
+                Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("wifi", modifier = Modifier.padding(start = NivoSpace.m))
             }
-            if (settings.settingsSearch) PreviewResult("⚙", "Wi-Fi", "Settings")
-            if (settings.contactsSearch) PreviewResult("W", "Will Fischer", "Contacts")
-            if (settings.webSuggestions && settings.webSearch) PreviewResult("🔍", "wifi password", "Suggestion")
-            if (settings.webSearch) PreviewResult("↗", "Search ${settings.searchProvider.label} for “wifi”", "")
+            if (settings.settingsSearch) PreviewResult(Icons.Filled.Settings, "Wi-Fi", "Settings")
+            if (settings.contactsSearch) PreviewResult(Icons.Filled.Person, "Will Fischer", "Contacts")
+            if (settings.webSuggestions && settings.webSearch) PreviewResult(Icons.Default.Search, "wifi password", "Suggestion")
+            if (settings.webSearch) PreviewResult(Icons.Filled.Public, "Search ${settings.searchProvider.label} for “wifi”", "")
         }
     }
 }
 
 @Composable
-private fun PreviewResult(badge: String, title: String, sub: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) { Text(badge) }
-        Column(Modifier.padding(start = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
-            if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun PreviewResult(badge: ImageVector, title: String, sub: String) {
+    Row(Modifier.heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(36.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(badge, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(18.dp))
+        }
+        Column(Modifier.padding(start = NivoSpace.m).weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
     }
 }
@@ -374,7 +396,7 @@ fun BadgePreview(settings: LauncherSettings, apps: List<AppInfo>) {
         CompositionLocalProvider(
             LocalBadgeStyle provides BadgeStyle(settings.notificationDots, settings.notificationCount, settings.badgeColor.color(), counts)
         ) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            Row(Modifier.fillMaxWidth().padding(NivoSpace.l), horizontalArrangement = Arrangement.SpaceEvenly) {
                 sample.forEach { AppIconView(it, 1f, true, onWallpaper = false) }
             }
         }
@@ -385,10 +407,10 @@ fun BadgePreview(settings: LauncherSettings, apps: List<AppInfo>) {
 @Composable
 fun WidgetPreview(settings: LauncherSettings) {
     PreviewCard {
-        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(NivoSpace.l), contentAlignment = Alignment.Center) {
             Box(
                 Modifier.fillMaxWidth(0.8f).height(90.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(if (settings.roundedWidgets) 20.dp else 0.dp)),
+                    .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(if (settings.roundedWidgets) NivoRadius.card else 0.dp)),
                 contentAlignment = Alignment.Center,
             ) { Text("10:08", style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.onPrimaryContainer) }
         }
@@ -398,10 +420,10 @@ fun WidgetPreview(settings: LauncherSettings) {
 @Composable
 fun PreviewCard(content: @Composable () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(NivoRadius.card),
         color = MaterialTheme.colorScheme.surfaceContainer,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
     ) { content() }
 }
 
@@ -409,17 +431,17 @@ fun PreviewCard(content: @Composable () -> Unit) {
 @Composable
 fun LibraryPreview(groups: List<com.snapkode.nivolauncher.data.LibraryGroup>) {
     PreviewCard {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.padding(NivoSpace.m), verticalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
             groups.take(4).chunked(2).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                     row.forEach { g ->
                         Column(
-                            Modifier.weight(1f).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(18.dp)).padding(10.dp),
+                            Modifier.weight(1f).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(NivoRadius.control)).padding(10.dp),
                         ) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 g.apps.take(3).forEach { androidx.compose.foundation.Image(it.icon, null, Modifier.size(28.dp)) }
                             }
-                            Text(g.name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp), maxLines = 1)
+                            Text(g.name, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -433,12 +455,20 @@ fun LibraryPreview(groups: List<com.snapkode.nivolauncher.data.LibraryGroup>) {
 fun MotionPreview() {
     var right by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val motion = com.snapkode.nivolauncher.ui.design.LocalMotion.current
-    val x by androidx.compose.animation.core.animateDpAsState(if (right) 220.dp else 0.dp, motion.spring(1f), label = "ball")
+    // 0..1 progress; the travel distance is the track's real width, so the ball never runs off a narrow card.
+    val t by androidx.compose.animation.core.animateFloatAsState(if (right) 1f else 0f, motion.spring(1f), label = "ball")
     PreviewCard {
-        Column(Modifier.padding(16.dp).clickable { right = !right }) {
+        Column(Modifier.clickable(role = Role.Button, onClickLabel = "Replay") { right = !right }.padding(NivoSpace.l)) {
             Text("Tap to replay", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Box(Modifier.fillMaxWidth().padding(top = 12.dp).height(56.dp)) {
-                Box(Modifier.offset(x = x).size(56.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+            BoxWithConstraints(
+                Modifier.fillMaxWidth().padding(top = NivoSpace.m).height(56.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+            ) {
+                val travel = (maxWidth - 56.dp).coerceAtLeast(0.dp)
+                Box(
+                    Modifier.graphicsLayer { translationX = travel.toPx() * t }
+                        .size(56.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                )
             }
         }
     }
