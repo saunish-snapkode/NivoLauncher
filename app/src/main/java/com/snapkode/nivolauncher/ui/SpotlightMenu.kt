@@ -47,6 +47,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.draw.drawBehind
 import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import kotlin.math.roundToInt
 
 /**
@@ -86,8 +88,8 @@ fun SpotlightMenu(anchor: Rect, expanded: Boolean, onDismiss: () -> Unit, conten
         val p = progress.value.coerceIn(0f, 1.2f)
         val pClamped = p.coerceIn(0f, 1f)
 
-        val margin = 16.dp
-        val gap = 16.dp
+        val margin = NivoSpace.l
+        val gap = NivoSpace.l
         val inflate = 10.dp
         var cardH by remember { mutableStateOf(0) }
         var cardWpx by remember { mutableStateOf(0) }
@@ -115,7 +117,7 @@ fun SpotlightMenu(anchor: Rect, expanded: Boolean, onDismiss: () -> Unit, conten
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                     .pointerInput(Unit) { detectTapGestures(onTap = { onDismiss() }, onPress = { }) }
                     .drawBehind {
-                        drawRect(Color.Black.copy(alpha = 0.62f * pClamped))
+                        drawRect(scheme.scrim.copy(alpha = 0.62f * pClamped))
                         val grow = 1f - 0.25f * (1f - pClamped)
                         val holeW = lit.width * grow
                         val holeH = lit.height * grow
@@ -152,6 +154,7 @@ fun SpotlightMenu(anchor: Rect, expanded: Boolean, onDismiss: () -> Unit, conten
 
             // The card itself grows out of the pointer.
             val pivotX = ((caretX - x) / cardW).coerceIn(0f, 1f)
+            val cardShape = RoundedCornerShape(NivoRadius.card)
             Column(
                 Modifier
                     .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
@@ -160,17 +163,18 @@ fun SpotlightMenu(anchor: Rect, expanded: Boolean, onDismiss: () -> Unit, conten
                     .width(IntrinsicSize.Max)
                     .onSizeChanged { cardH = it.height; cardWpx = it.width }
                     .graphicsLayer {
-                        val s = 0.55f + 0.45f * p
+                        // Reduced motion: a plain cross-fade, no growing out of the item.
+                        val s = if (motion.reduced) 1f else 0.55f + 0.45f * p
                         scaleX = s; scaleY = s
                         alpha = if (cardH == 0 || cardWpx == 0) 0f else pClamped
                         transformOrigin = TransformOrigin(pivotX, if (below) 0f else 1f)
                     }
-                    .shadow(16.dp, RoundedCornerShape(20.dp))
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(20.dp))
+                    .shadow(16.dp, cardShape)
+                    .clip(cardShape)
+                    .border(1.dp, scheme.outlineVariant, cardShape)
                     .then(Modifier.drawBehind { drawRect(scheme.surfaceContainerHigh) })
                     .pointerInput(Unit) { detectTapGestures { } }
-                    .padding(vertical = 8.dp),
+                    .padding(vertical = NivoSpace.s),
                 content = content,
             )
         }

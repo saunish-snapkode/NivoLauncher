@@ -30,6 +30,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.AppInfo
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 
 /** An extra, context-specific entry shown beneath the shared App info / Uninstall entries. */
 data class MenuAction(val label: String, val run: () -> Unit)
@@ -54,7 +64,7 @@ fun AppMenu(
         shortcuts.forEach { shortcut ->
             NivoMenuItem(shortcut.label, MenuIcons.Shortcut, { onDismiss(); viewModel.startShortcut(shortcut) })
         }
-        if (shortcuts.isNotEmpty()) HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        if (shortcuts.isNotEmpty()) HorizontalDivider(Modifier.padding(horizontal = NivoSpace.l, vertical = NivoSpace.xs), color = MaterialTheme.colorScheme.outlineVariant)
         // The three actions people reach for most sit in a row; the rest stay in a short list below.
         val select = extraActions.firstOrNull { it.label == "Select" }
         NivoQuickRow {
@@ -62,7 +72,7 @@ fun AppMenu(
             NivoQuickAction("App info", MenuIcons.Info, { onDismiss(); viewModel.showAppInfo(app) }, Modifier.weight(1f))
             NivoQuickAction("Uninstall", MenuIcons.Uninstall, { onDismiss(); viewModel.uninstall(app) }, Modifier.weight(1f), destructive = true)
         }
-        HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+        HorizontalDivider(Modifier.padding(horizontal = NivoSpace.l, vertical = NivoSpace.xs), color = MaterialTheme.colorScheme.outlineVariant)
         extraActions.filter { it !== select }.forEach { action ->
             NivoMenuItem(action.label, menuIconFor(action.label), { onDismiss(); action.run() })
         }
@@ -77,7 +87,15 @@ private fun RenameDialog(app: AppInfo, viewModel: LauncherViewModel, onDone: () 
     AlertDialog(
         onDismissRequest = onDone,
         title = { Text("Rename app") },
-        text = { OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true) },
+        text = {
+            OutlinedTextField(
+                value = name, onValueChange = { name = it }, singleLine = true,
+                label = { Text("Name") },
+                modifier = Modifier.fillMaxWidth(),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.renameApp(app.id, name); onDone() }),
+            )
+        },
         confirmButton = { TextButton(onClick = { viewModel.renameApp(app.id, name); onDone() }) { Text("Save") } },
         dismissButton = { TextButton(onClick = { viewModel.renameApp(app.id, ""); onDone() }) { Text("Reset") } },
     )
@@ -105,7 +123,14 @@ private fun IconPickerDialog(app: AppInfo, viewModel: LauncherViewModel, onDone:
                 TextButton(onClick = { gallery.launch("image/*") }) { Text("Choose a picture…") }
                 TextButton(onClick = { viewModel.setIconOverride(app.id, null); onDone() }) { Text("Reset to default") }
                 if (pack != null && names.isNotEmpty()) {
-                    Text("From ${settings.iconPack}", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        "From ${settings.iconPack}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = NivoSpace.s, bottom = NivoSpace.xs),
+                    )
                     androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                         columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(5),
                         modifier = Modifier.heightIn(max = 280.dp),
@@ -119,9 +144,11 @@ private fun IconPickerDialog(app: AppInfo, viewModel: LauncherViewModel, onDone:
                             if (bitmap != null) {
                                 androidx.compose.foundation.Image(
                                     bitmap, name,
-                                    Modifier.padding(4.dp).size(48.dp).clickable {
-                                        viewModel.setIconOverride(app.id, "pack:${settings.iconPack}/$name"); onDone()
-                                    },
+                                    Modifier.padding(NivoSpace.xs).size(NivoTouch.min)
+                                        .clip(RoundedCornerShape(NivoRadius.control))
+                                        .clickable(role = Role.Button) {
+                                            viewModel.setIconOverride(app.id, "pack:${settings.iconPack}/$name"); onDone()
+                                        },
                                 )
                             }
                         }
@@ -130,6 +157,8 @@ private fun IconPickerDialog(app: AppInfo, viewModel: LauncherViewModel, onDone:
                     Text(
                         "Pick an icon pack in Settings → Icons to choose from its icons here.",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = NivoSpace.s),
                     )
                 }
             }

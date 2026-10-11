@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -45,11 +47,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.isFolderId
 import com.snapkode.nivolauncher.data.isWidgetId
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoElevation
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import com.snapkode.nivolauncher.ui.design.nivoCard
 
 /** Which screen a selection started on; taps only add to the selection on that screen. */
@@ -89,6 +104,7 @@ fun SelectionBar(viewModel: LauncherViewModel, selection: SelectionState, drawer
     val apps by viewModel.apps.collectAsState()
     val drawerFolders by viewModel.drawerFolders.collectAsState()
     val scheme = MaterialTheme.colorScheme
+    val motion = LocalMotion.current
     var choosingFolder by remember { mutableStateOf(false) }
 
     BackHandler(enabled = selection.active) { selection.clear() }
@@ -99,33 +115,39 @@ fun SelectionBar(viewModel: LauncherViewModel, selection: SelectionState, drawer
 
     AnimatedVisibility(
         visible = selection.active,
-        enter = slideInVertically { it } + fadeIn(),
-        exit = slideOutVertically { it } + fadeOut(),
+        // Rises from the bottom edge on the motion preset's spring; reduced motion makes it a quick fade.
+        enter = slideInVertically(motion.spring<IntOffset>()) { if (motion.reduced) 0 else it } + fadeIn(tween(motion.duration(180))),
+        exit = slideOutVertically(motion.spring<IntOffset>(1.4f)) { if (motion.reduced) 0 else it } + fadeOut(tween(motion.duration(140))),
     ) {
-        Box(Modifier.fillMaxSize().navigationBarsPadding().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
-            val shape = RoundedCornerShape(28.dp)
+        Box(Modifier.fillMaxSize().navigationBarsPadding().padding(NivoSpace.l), contentAlignment = Alignment.BottomCenter) {
+            val shape = RoundedCornerShape(NivoRadius.sheet)
             // Swallow taps on the bar itself so they never reach icons beneath it. There is no Surface here, so set the text colour.
             androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalContentColor provides scheme.onSurface) {
             Column(
                 Modifier.widthIn(max = 480.dp).fillMaxWidth()
+                    // A floating bar over icons: lift it off the content so it never reads as part of the grid.
+                    .shadow(NivoElevation.modal, shape)
                     .nivoCard(shape, scheme.surfaceContainerHigh, scheme.outlineVariant)
                     .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {}
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                    .padding(NivoSpace.s),
             ) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.size(40.dp).clip(CircleShape).clickable { selection.clear() },
+                        Modifier.size(NivoTouch.min).clip(CircleShape).clickable(role = Role.Button) { selection.clear() },
                         contentAlignment = Alignment.Center,
                     ) { Icon(Icons.Filled.Close, "Cancel selection", tint = scheme.onSurfaceVariant) }
+                    val count = selection.selected.size
                     Text(
-                        "${selection.selected.size} selected",
+                        "$count selected",
                         style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 8.dp).weight(1f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        // Announce the running count as items are added or removed.
+                        modifier = Modifier.padding(start = NivoSpace.xs).weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
                 val ids = selection.selected.toList()
                 val chosenApps = ids.mapNotNull { id -> apps.firstOrNull { it.id == id } }
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Row(Modifier.fillMaxWidth().padding(top = NivoSpace.xs), horizontalArrangement = Arrangement.SpaceEvenly) {
                     if (selection.source == SelectionSource.Drawer) {
                         BarAction("Add to Home", Icons.Outlined.Add) {
                             ids.forEach(viewModel::addToHome); selection.clear()
@@ -160,17 +182,14 @@ fun SelectionBar(viewModel: LauncherViewModel, selection: SelectionState, drawer
             text = {
                 Column {
                     drawerFolders.values.forEach { folder ->
-                        Text(
-                            folder.name,
-                            Modifier.fillMaxWidth().clickable {
-                                ids.forEach { viewModel.addToDrawerFolder(folder.id, it) }
-                                choosingFolder = false; selection.clear()
-                            }.padding(vertical = 12.dp),
-                        )
+                        NivoChoiceRow(folder.name, Icons.Outlined.Folder) {
+                            ids.forEach { viewModel.addToDrawerFolder(folder.id, it) }
+                            choosingFolder = false; selection.clear()
+                        }
                     }
                     OutlinedTextField(
                         value = name, onValueChange = { name = it.take(24) }, singleLine = true,
-                        label = { Text("New folder") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        label = { Text("New folder") }, modifier = Modifier.fillMaxWidth().padding(top = NivoSpace.s),
                     )
                 }
             },
@@ -191,13 +210,20 @@ fun SelectionBar(viewModel: LauncherViewModel, selection: SelectionState, drawer
 @Composable
 private fun BarAction(label: String, icon: ImageVector, destructive: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val tint = (if (destructive) scheme.error else scheme.onSurface).copy(alpha = if (enabled) 1f else 0.35f)
+    val tint = (if (destructive) scheme.error else scheme.onSurface).copy(alpha = if (enabled) NivoAlpha.high else NivoAlpha.disabled)
     Column(
-        Modifier.widthIn(min = 72.dp).clip(RoundedCornerShape(16.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.widthIn(min = 72.dp)
+            .clip(RoundedCornerShape(NivoRadius.control))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = NivoSpace.s),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icon, null, tint = tint, modifier = Modifier.size(22.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = tint, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            label, style = MaterialTheme.typography.labelMedium, color = tint,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = NivoSpace.xs),
+        )
     }
 }
 
