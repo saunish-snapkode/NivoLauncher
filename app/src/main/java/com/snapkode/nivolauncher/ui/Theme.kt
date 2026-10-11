@@ -94,11 +94,11 @@ fun NivoTheme(viewModel: LauncherViewModel, content: @Composable () -> Unit) {
             colorScheme = scheme.animated(motion),
             typography = typography,
             shapes = androidx.compose.material3.Shapes(
-                extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+                extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(com.snapkode.nivolauncher.ui.design.NivoRadius.inner),
                 small = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
-                medium = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-                large = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                medium = androidx.compose.foundation.shape.RoundedCornerShape(com.snapkode.nivolauncher.ui.design.NivoRadius.control),
+                large = androidx.compose.foundation.shape.RoundedCornerShape(com.snapkode.nivolauncher.ui.design.NivoRadius.card),
+                extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(com.snapkode.nivolauncher.ui.design.NivoRadius.sheet),
             ),
             content = content,
         )

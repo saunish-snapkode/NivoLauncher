@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,18 @@ import com.snapkode.nivolauncher.ui.NivoMenu
 import com.snapkode.nivolauncher.ui.NivoMenuItem
 import com.snapkode.nivolauncher.ui.design.LocalMotion
 import com.snapkode.nivolauncher.ui.design.nivoCard
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoElevation
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 
 enum class ArrangeKind(val label: String) {
     AlignHorizontally("Align horizontally"),
@@ -114,21 +127,23 @@ internal fun LassoToolbar(
         enter = slideInVertically(tween(ms, easing = FastOutSlowInEasing)) { it } + fadeIn(tween(ms)),
         exit = slideOutVertically(tween(ms, easing = FastOutSlowInEasing)) { it } + fadeOut(tween(ms)),
     ) {
-        val shape = RoundedCornerShape(28.dp)
+        val shape = RoundedCornerShape(NivoRadius.dock)
         Column(
             Modifier
                 .widthIn(max = 560.dp)
                 .fillMaxWidth()
-                .nivoCard(shape, scheme.surfaceContainerHigh.copy(alpha = 0.97f), scheme.outlineVariant)
+                // Floats over the wallpaper: a soft modal shadow separates it from busy backgrounds.
+                .shadow(NivoElevation.modal, shape)
+                .nivoCard(shape, scheme.surfaceContainerHigh, scheme.outlineVariant)
                 // The toolbar must swallow touches meant for it, never letting them fall through to the workspace.
                 .pointerInput(Unit) { detectTapGestures { } }
-                .padding(horizontal = 8.dp, vertical = 8.dp),
+                .padding(NivoSpace.s),
         ) {
             // Row 1: cancel, count, mode, done.
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 ToolButton(Icons.Filled.Close, "Cancel and undo changes", onClick = actions.cancel)
                 Column(
-                    Modifier.weight(1f).padding(horizontal = 6.dp)
+                    Modifier.weight(1f).padding(horizontal = NivoSpace.xs)
                         .semantics { liveRegion = LiveRegionMode.Polite },
                 ) {
                     androidx.compose.material3.Text(
@@ -140,6 +155,7 @@ internal fun LassoToolbar(
                         style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                         color = scheme.onSurface,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     val line = session.message
                         ?: if (count == 0) "Or tap icons one by one" else currentPageNumber?.let { "Page $it" }
@@ -149,31 +165,33 @@ internal fun LassoToolbar(
                             style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                             color = if (session.message != null) scheme.primary else scheme.onSurfaceVariant,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
                 ModeSwitch(session.mode) { session.mode = it }
-                androidx.compose.foundation.layout.Spacer(Modifier.size(4.dp))
+                androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
                 androidx.compose.material3.Button(
                     onClick = actions.done,
                     shape = CircleShape,
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = NivoSpace.l),
                     modifier = Modifier.heightIn(min = 40.dp),
                 ) {
                     androidx.compose.material3.Icon(Icons.Filled.Check, null, Modifier.size(18.dp))
-                    androidx.compose.material3.Text("Done", Modifier.padding(start = 6.dp))
+                    androidx.compose.material3.Text("Done", Modifier.padding(start = 6.dp), maxLines = 1)
                 }
             }
 
             // Row 2: page switcher (the overlay captures swipes, so changing page needs a control).
             if (pageCount > 1) {
-                Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                Row(Modifier.fillMaxWidth().padding(top = NivoSpace.xxs), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     ToolButton(Icons.Filled.ChevronLeft, "Previous page", onClick = actions.previousPage, size = 36.dp)
                     androidx.compose.material3.Text(
                         currentPageNumber?.let { "Page $it of $pageCount" } ?: "Pages",
                         style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
                         color = scheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp),
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = NivoSpace.m),
                     )
                     ToolButton(Icons.Filled.ChevronRight, "Next page", onClick = actions.nextPage, size = 36.dp)
                 }
@@ -181,7 +199,7 @@ internal fun LassoToolbar(
 
             // Row 3: the actions, when the radial menu is not carrying them.
             if (showActions) {
-                androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp, horizontal = 8.dp), color = scheme.outlineVariant)
+                androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 6.dp, horizontal = NivoSpace.s), color = scheme.outlineVariant)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                     ArrangeButton(enabled = count > 0 && !busy, onChoose = actions.arrange)
                     ActionButton(Icons.Outlined.CreateNewFolder, "Folder", count >= 2 && !busy, actions.createFolder)
@@ -193,10 +211,10 @@ internal fun LassoToolbar(
             }
 
             if (undoLabel != null) {
-                Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
+                Row(Modifier.fillMaxWidth().padding(top = NivoSpace.xs), horizontalArrangement = Arrangement.Center) {
                     androidx.compose.material3.TextButton(onClick = actions.undo) {
                         androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.Undo, null, Modifier.size(18.dp))
-                        androidx.compose.material3.Text("Undo ${undoLabel.lowercase()}", Modifier.padding(start = 6.dp))
+                        androidx.compose.material3.Text("Undo ${undoLabel.lowercase()}", Modifier.padding(start = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -217,19 +235,24 @@ internal fun LassoUndoPill(label: String?, onUndo: () -> Unit, modifier: Modifie
         exit = fadeOut(tween(ms)),
     ) {
         val shape = CircleShape
+        val interaction = remember { MutableInteractionSource() }
         Row(
             Modifier
+                .heightIn(min = NivoTouch.min)
+                .pressFeedback(interaction)
+                .shadow(NivoElevation.modal, shape)
                 .nivoCard(shape, scheme.surfaceContainerHigh, scheme.outlineVariant)
-                .clickable(role = Role.Button, onClickLabel = "Undo", onClick = onUndo)
-                .padding(horizontal = 18.dp, vertical = 12.dp),
+                .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), role = Role.Button, onClickLabel = "Undo", onClick = onUndo)
+                .padding(horizontal = 18.dp, vertical = NivoSpace.m),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             androidx.compose.material3.Icon(Icons.AutoMirrored.Filled.Undo, null, Modifier.size(18.dp), tint = scheme.primary)
             androidx.compose.material3.Text(
                 "Undo ${label.orEmpty().lowercase()}",
-                Modifier.padding(start = 8.dp),
+                Modifier.padding(start = NivoSpace.s),
                 style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
                 color = scheme.onSurface,
+                maxLines = 1,
             )
         }
     }
@@ -238,7 +261,7 @@ internal fun LassoUndoPill(label: String?, onUndo: () -> Unit, modifier: Modifie
 @Composable
 private fun ToolButton(icon: ImageVector, description: String, onClick: () -> Unit, size: androidx.compose.ui.unit.Dp = 44.dp) {
     Box(
-        Modifier.size(maxOf(size, 48.dp)).clip(CircleShape).clickable(role = Role.Button, onClickLabel = description, onClick = onClick)
+        Modifier.size(maxOf(size, NivoTouch.min)).clip(CircleShape).clickable(role = Role.Button, onClickLabel = description, onClick = onClick)
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
@@ -250,6 +273,8 @@ private fun ToolButton(icon: ImageVector, description: String, onClick: () -> Un
 @Composable
 private fun ModeSwitch(mode: SelectionMode, onChange: (SelectionMode) -> Unit) {
     val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+    val motion = LocalMotion.current
+    // A segmented pill: the active segment fills with a light wash of its colour (red for Deselect).
     Row(
         Modifier.clip(CircleShape).border(1.dp, scheme.outlineVariant, CircleShape).padding(2.dp)
             .semantics { contentDescription = "Selection mode" },
@@ -257,16 +282,21 @@ private fun ModeSwitch(mode: SelectionMode, onChange: (SelectionMode) -> Unit) {
         for (m in SelectionMode.entries) {
             val on = m == mode
             val tint = if (m == SelectionMode.Subtract) scheme.error else scheme.primary
+            val fill by animateColorAsState(if (on) tint.copy(alpha = 0.16f) else Color.Transparent, motion.spring(), label = "modeFill")
+            val text by animateColorAsState(if (on) tint else scheme.onSurfaceVariant, motion.spring(), label = "modeText")
             androidx.compose.material3.Text(
                 if (m == SelectionMode.Add) "Add" else "Deselect",
                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                color = if (on) tint else scheme.onSurfaceVariant,
+                color = text,
+                maxLines = 1,
                 modifier = Modifier
                     .clip(CircleShape)
+                    .background(fill, CircleShape)
                     .clickable(role = Role.RadioButton, onClick = { onChange(m) })
                     .semantics { selected = on; stateDescription = if (on) "On" else "Off" }
-                    .then(if (on) Modifier.border(1.dp, tint.copy(alpha = 0.5f), CircleShape) else Modifier)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .heightIn(min = 36.dp)
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = 10.dp),
             )
         }
     }
@@ -287,19 +317,32 @@ private fun ActionButton(
         selected -> scheme.primary
         else -> scheme.onSurface
     }
-    val tint = base.copy(alpha = if (enabled) 1f else 0.35f)
+    val tint = base.copy(alpha = if (enabled) 1f else NivoAlpha.disabled)
+    val shape = RoundedCornerShape(NivoRadius.control)
+    val interaction = remember { MutableInteractionSource() }
     Column(
         Modifier
             .widthIn(min = 52.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .then(if (selected) Modifier.border(1.dp, scheme.primary.copy(alpha = 0.5f), RoundedCornerShape(14.dp)) else Modifier)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp)
-            .semantics { contentDescription = label },
+            .heightIn(min = NivoTouch.min)
+            .pressFeedback(interaction)
+            .clip(shape)
+            .then(
+                if (selected) Modifier.background(scheme.primaryContainer, shape).border(1.dp, scheme.primary.copy(alpha = 0.5f), shape)
+                else Modifier,
+            )
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.s, vertical = NivoSpace.s)
+            .semantics {
+                contentDescription = label
+                if (selected) stateDescription = "On"
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         androidx.compose.material3.Icon(icon, null, Modifier.size(22.dp), tint = tint)
-        androidx.compose.material3.Text(label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+        androidx.compose.material3.Text(
+            label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall, color = tint, maxLines = 1,
+            modifier = Modifier.padding(top = NivoSpace.xxs),
+        )
     }
 }
 

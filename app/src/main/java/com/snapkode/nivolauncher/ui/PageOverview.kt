@@ -94,6 +94,15 @@ import com.snapkode.nivolauncher.data.HomeItem
 import com.snapkode.nivolauncher.data.isFolderId
 import com.snapkode.nivolauncher.data.isAnyWidgetId
 import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -141,6 +150,7 @@ fun EditSheet(
     val pull = remember { androidx.compose.animation.core.Animatable(0f) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val closeAt = with(density) { 72.dp.toPx() }
+    val motion = LocalMotion.current
     Surface(
         modifier = modifier.fillMaxWidth()
             .graphicsLayer { translationY = pull.value }
@@ -149,29 +159,30 @@ fun EditSheet(
                 state = androidx.compose.foundation.gestures.rememberDraggableState { d -> scope.launch { pull.snapTo((pull.value + d).coerceAtLeast(0f)) } },
                 onDragStopped = { v ->
                     if (pull.value > closeAt || v > 1200f) onDone()
-                    else pull.animateTo(0f, androidx.compose.animation.core.spring(stiffness = 900f))
+                    else pull.animateTo(0f, motion.spring(weight = 1.3f))
                 },
             ),
         shape = RoundedCornerShape(topStart = NivoRadius.sheet, topEnd = NivoRadius.sheet),
         color = scheme.surfaceContainerLow,
         border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant),
     ) {
-        Column(Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(horizontal = NivoSpace.l, vertical = NivoSpace.m)) {
+            // Material drag handle: 32x4, on-surface-variant at 40%.
             Box(
-                Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp).size(width = 36.dp, height = 4.dp)
-                    .background(scheme.outline, CircleShape)
+                Modifier.align(Alignment.CenterHorizontally).padding(bottom = NivoSpace.l).size(width = 32.dp, height = 4.dp)
+                    .background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape)
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
                 EditTile("Style & colours", Icons.Outlined.Palette, onStyle, modifier = Modifier.weight(1f))
                 EditTile("Widgets", Icons.Outlined.Widgets, onWidgets, enabled = widgetsEnabled, modifier = Modifier.weight(1f))
                 EditTile("Home settings", Icons.Outlined.Home, onSettings, modifier = Modifier.weight(1f))
             }
             // Only shortcuts that act right here; anything that opens Settings lives behind "Home settings".
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = NivoSpace.m), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                 EditChip("Wallpaper", Icons.Outlined.Wallpaper, onWallpaper, modifier = Modifier.weight(1f))
                 EditChip("Pages", Icons.Outlined.ViewCarousel, onPages, enabled = pagesEnabled, modifier = Modifier.weight(1f))
             }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = NivoSpace.s, bottom = NivoSpace.s), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                 EditChip("Select", Icons.Outlined.Gesture, onLasso, enabled = lassoEnabled, modifier = Modifier.weight(1f))
                 // Stays tappable while dimmed: the tap explains why a Pagelet can't be added right now.
                 EditChip("Pagelets", Icons.Outlined.AutoAwesome, onPagelet, dim = !pageletEnabled, modifier = Modifier.weight(1f))
@@ -185,43 +196,55 @@ private fun EditTile(label: String, icon: ImageVector, onClick: () -> Unit, modi
     val scheme = MaterialTheme.colorScheme
     val container = if (selected) scheme.primaryContainer else scheme.surfaceContainer
     val content = if (selected) scheme.primary else scheme.onSurface
+    val shape = RoundedCornerShape(NivoRadius.card)
+    val interaction = remember { MutableInteractionSource() }
     Column(
         modifier
             .heightIn(min = 96.dp)
-            .alpha(if (enabled) 1f else 0.4f)
-            .background(container, RoundedCornerShape(20.dp))
-            .border(1.dp, if (selected) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant, RoundedCornerShape(20.dp))
-            .clip(RoundedCornerShape(20.dp))
-            .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 14.dp),
+            .pressFeedback(interaction)
+            .alpha(if (enabled) 1f else NivoAlpha.disabled)
+            .background(container, shape)
+            .border(1.dp, if (selected) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant, shape)
+            .clip(shape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.s, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top,
     ) {
-        Icon(icon, null, tint = content, modifier = Modifier.size(24.dp))
-        Text(label, style = MaterialTheme.typography.titleSmall, color = content, minLines = 2, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
+        // The icon sits in a soft tonal disc so the three tiles read as one family.
+        Box(
+            Modifier.size(40.dp).background(if (selected) scheme.primary.copy(alpha = 0.16f) else scheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = if (selected) scheme.primary else scheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
+        }
+        Text(label, style = MaterialTheme.typography.titleSmall, color = content, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.s))
     }
 }
 
 @Composable
 private fun EditChip(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier = Modifier, selected: Boolean = false, enabled: Boolean = true, dim: Boolean = false) {
     val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(NivoRadius.control)
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier
-            .heightIn(min = 48.dp)
-            .alpha(if (enabled && !dim) 1f else 0.4f)
-            .background(if (selected) scheme.primaryContainer else Color.Transparent, RoundedCornerShape(14.dp))
-            .border(1.dp, if (selected) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 12.dp),
+            .heightIn(min = NivoTouch.min)
+            .pressFeedback(interaction)
+            .alpha(if (enabled && !dim) 1f else NivoAlpha.disabled)
+            .background(if (selected) scheme.primaryContainer else Color.Transparent, shape)
+            .border(1.dp, if (selected) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant, shape)
+            .clip(shape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.m),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         Icon(icon, null, tint = if (selected) scheme.primary else scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         Text(
-            label, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge,
+            label, Modifier.padding(start = NivoSpace.s), style = MaterialTheme.typography.labelLarge,
             color = if (selected) scheme.primary else scheme.onSurface,
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -260,29 +283,28 @@ fun PageOverview(
         }
     }
     val dock = remember(items, settings.dockSlots) { items.filter { it.inDock && it.col < settings.dockSlots } }
-    Box(Modifier.fillMaxSize().background(scheme.surface).clickable(onClick = onClose)) {
+    // Tapping empty space closes, quietly: no full-screen ripple behind the cards.
+    Box(Modifier.fillMaxSize().background(scheme.surface).clickable(interactionSource = null, indication = null, onClickLabel = "Close pages", onClick = onClose)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-            Row(Modifier.padding(start = 24.dp, end = 24.dp, top = 36.dp, bottom = 16.dp), verticalAlignment = Alignment.Bottom) {
+            Row(Modifier.padding(start = NivoSpace.xl, end = NivoSpace.s, top = 36.dp, bottom = NivoSpace.l), verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
-                    Text("Pages", style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface)
+                    Text("Pages", style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface, modifier = Modifier.semantics { heading() })
                     Text(
                         if (pageCount == 1) "1 page" else "$pageCount pages",
                         style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant,
                     )
                 }
-                Text(
-                    "Done",
-                    style = MaterialTheme.typography.titleMedium, color = scheme.primary,
-                    modifier = Modifier.clip(CircleShape).clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClose)
-                        .heightIn(min = 48.dp).wrapContentHeight(Alignment.CenterVertically).padding(horizontal = 16.dp),
-                )
+                TextButton(onClick = onClose, modifier = Modifier.heightIn(min = NivoTouch.min)) {
+                    Text("Done", style = MaterialTheme.typography.titleMedium, color = scheme.primary)
+                }
             }
             androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
                 columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
                 modifier = Modifier.weight(1f),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                // Extra bottom room so the Undo pill never sits over the last row.
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(start = NivoSpace.l, end = NivoSpace.l, bottom = 96.dp),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.m),
+                verticalArrangement = Arrangement.spacedBy(NivoSpace.m),
             ) {
                 gridItems((0 until pageCount).toList(), key = { it }) { page ->
                     val pageItems = items.filter { !it.inDock && it.page == page }
@@ -313,20 +335,23 @@ fun PageOverview(
                 }
                 if (!settings.lockHome) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                     val shape = RoundedCornerShape(24.dp)
+                    val interaction = remember { MutableInteractionSource() }
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 72.dp)
+                            .pressFeedback(interaction)
+                            .background(scheme.surfaceContainerLow, shape)
                             .border(1.dp, scheme.outlineVariant, shape)
                             .clip(shape)
                             .semantics { contentDescription = "Add a page" }
-                            .clickable(role = androidx.compose.ui.semantics.Role.Button) { adding = true }
-                            .padding(horizontal = 20.dp, vertical = 12.dp),
+                            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), role = Role.Button) { adding = true }
+                            .padding(horizontal = 20.dp, vertical = NivoSpace.m),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         Box(Modifier.size(40.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
                             Icon(Icons.Filled.Add, null, tint = scheme.primary, modifier = Modifier.size(22.dp))
                         }
-                        Text("Add a page", style = MaterialTheme.typography.titleMedium, color = scheme.onSurface, modifier = Modifier.padding(start = 14.dp))
+                        Text("Add a page", style = MaterialTheme.typography.titleMedium, color = scheme.onSurface, modifier = Modifier.padding(start = NivoSpace.m))
                     }
                 }
             }
@@ -337,7 +362,7 @@ fun PageOverview(
             visible = undo != null,
             onUndo = { viewModel.undoRemovePagelet() },
             onExpire = { viewModel.clearPageletUndo() },
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 24.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = NivoSpace.xl),
         )
     }
     if (adding) AddPageSheet(
@@ -360,10 +385,10 @@ private fun AddPageSheet(
     val sheet = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scheme = MaterialTheme.colorScheme
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
-        Column(Modifier.navigationBarsPadding().padding(bottom = 16.dp)) {
+        Column(Modifier.navigationBarsPadding().padding(bottom = NivoSpace.l)) {
             Text(
                 "Add a page", style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 8.dp).semantics { heading() },
+                modifier = Modifier.padding(start = NivoSpace.xl, end = NivoSpace.xl, top = NivoSpace.s, bottom = NivoSpace.s).semantics { heading() },
             )
             AddRow("Blank page", "An empty page for icons and widgets", Icons.Filled.Add, enabled = true, onClick = onBlank)
             com.snapkode.nivolauncher.pagelet.PageletType.entries.filter { it.available }.forEach { type ->
@@ -381,17 +406,17 @@ private fun AddPageSheet(
 private fun AddRow(title: String, subtitle: String, icon: ImageVector, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 64.dp).alpha(if (enabled) 1f else 0.45f)
-            .clickable(enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).alpha(if (enabled) 1f else NivoAlpha.disabled)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.xl, vertical = NivoSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = scheme.primary, modifier = Modifier.size(22.dp))
         }
-        Column(Modifier.padding(start = 16.dp).weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        Column(Modifier.padding(start = NivoSpace.l).weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -419,32 +444,48 @@ private fun PageCard(
     onDelete: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    // Outer 24dp corners with 10dp padding make the preview's 14dp corners concentric.
     val shape = RoundedCornerShape(24.dp)
+    val previewShape = RoundedCornerShape(NivoRadius.control)
+    val previewPress = remember { MutableInteractionSource() }
     Column(
         Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(scheme.surfaceContainer, shape)
-            .border(if (isCurrent) 1.5.dp else 1.dp, if (isCurrent) scheme.primary.copy(alpha = 0.7f) else scheme.outlineVariant, shape)
+            .background(if (isCurrent) androidx.compose.ui.graphics.lerp(scheme.surfaceContainer, scheme.primaryContainer, 0.5f) else scheme.surfaceContainer, shape)
+            .border(if (isCurrent) 2.dp else 1.dp, if (isCurrent) scheme.primary.copy(alpha = 0.8f) else scheme.outlineVariant, shape)
             .padding(10.dp),
     ) {
         PagePreview(
             pageItems, dock.takeIf { showDock }.orEmpty(), appsById, columns, rows,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = (pageletType?.title ?: "Page ${page + 1}") }.clickable(onClickLabel = "Open page", onClick = onOpen),
+            shape = previewShape,
+            modifier = Modifier.fillMaxWidth()
+                .pressFeedback(previewPress)
+                .clip(previewShape)
+                .semantics {
+                    contentDescription = (pageletType?.title ?: "Page ${page + 1}")
+                    val state = listOfNotNull("Home page".takeIf { isHome }, "Current page".takeIf { isCurrent })
+                    if (state.isNotEmpty()) stateDescription = state.joinToString(", ")
+                }
+                .clickable(interactionSource = previewPress, indication = androidx.compose.material3.ripple(), role = Role.Button, onClickLabel = "Open page", onClick = onOpen),
         )
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = NivoSpace.xs, end = NivoSpace.xs, top = 10.dp).heightIn(min = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             if (isHome) Icon(Icons.Filled.Home, null, tint = scheme.primary, modifier = Modifier.size(16.dp))
             if (isHome) Spacer(Modifier.width(6.dp))
             Text(
                 pageletType?.title ?: if (isHome) "Home" else "Page ${page + 1}",
                 style = MaterialTheme.typography.titleSmall,
                 color = if (isCurrent) scheme.onSurface else scheme.onSurfaceVariant,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            if (isCurrent) Box(Modifier.size(7.dp).background(scheme.primary, CircleShape))
+            if (isCurrent) Box(Modifier.size(8.dp).background(scheme.primary, CircleShape))
         }
         Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp).background(scheme.surfaceContainerHigh, CircleShape).padding(horizontal = 4.dp),
+            Modifier.fillMaxWidth().padding(top = NivoSpace.s).background(scheme.surfaceContainerHigh, CircleShape).padding(horizontal = NivoSpace.xs),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -468,8 +509,8 @@ private fun PageCard(
 @Composable
 private fun SmallAction(icon: ImageVector, description: String, modifier: Modifier = Modifier, enabled: Boolean = true, tint: Color = Color.White, onClick: () -> Unit) {
     // Four equal slots across the card, so none is pushed off its edge on a narrow screen.
-    IconButton(onClick = onClick, enabled = enabled, modifier = modifier.height(44.dp).semantics { contentDescription = description }) {
-        Icon(icon, null, tint = tint.copy(alpha = if (enabled) 1f else 0.3f), modifier = Modifier.size(18.dp))
+    IconButton(onClick = onClick, enabled = enabled, modifier = modifier.height(NivoTouch.min).semantics { contentDescription = description }) {
+        Icon(icon, null, tint = tint.copy(alpha = if (enabled) 1f else NivoAlpha.disabled), modifier = Modifier.size(20.dp))
     }
 }
 
@@ -482,16 +523,16 @@ private fun PagePreview(
     columns: Int,
     rows: Int,
     modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(NivoRadius.control),
 ) {
     val scheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(18.dp)
     Column(
         modifier
             .aspectRatio(9f / 16f)
             .clip(shape)
             .background(Brush.verticalGradient(listOf(scheme.primaryContainer.copy(alpha = 0.55f), scheme.surfaceContainerLow, scheme.tertiaryContainer.copy(alpha = 0.4f))), shape)
             .border(1.dp, scheme.outlineVariant, shape)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(NivoSpace.s),
     ) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val cellW = maxWidth / columns
@@ -522,7 +563,7 @@ private fun PagePreview(
         }
         if (dock.isNotEmpty()) {
             Row(
-                Modifier.fillMaxWidth().padding(top = 6.dp).background(scheme.onSurface.copy(alpha = 0.08f), CircleShape).padding(vertical = 5.dp),
+                Modifier.fillMaxWidth().padding(top = 6.dp).background(scheme.onSurface.copy(alpha = 0.08f), CircleShape).padding(vertical = NivoSpace.xs),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 dock.sortedBy { it.col }.take(5).forEach { item ->
@@ -541,10 +582,12 @@ private fun PageletThumb(type: com.snapkode.nivolauncher.pagelet.PageletType) {
     val sky = type == com.snapkode.nivolauncher.pagelet.PageletType.SKY
     val bg = if (sky) Brush.verticalGradient(listOf(Color(0xFF1B2A4A), Color(0xFF4A5C8A), Color(0xFF0B0D12)))
     else Brush.verticalGradient(listOf(scheme.surface, scheme.surface))
-    Box(Modifier.fillMaxSize().padding(2.dp).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(NivoSpace.xxs).clip(RoundedCornerShape(10.dp)).background(bg), contentAlignment = Alignment.Center) {
         Text(
             type.title, style = MaterialTheme.typography.labelLarge,
             color = if (sky) Color.White else scheme.onSurface,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = NivoSpace.xs),
         )
     }
 }

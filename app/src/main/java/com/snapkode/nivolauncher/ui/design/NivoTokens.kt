@@ -1,7 +1,11 @@
 package com.snapkode.nivolauncher.ui.design
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.composed
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
@@ -21,12 +25,28 @@ import com.snapkode.nivolauncher.data.NivoPaletteSpec
 
 /** Spacing scale. Use these instead of ad-hoc dp values. */
 object NivoSpace {
+    val xxs = 2.dp
     val xs = 4.dp
     val s = 8.dp
     val m = 12.dp
     val l = 16.dp
     val xl = 24.dp
     val xxl = 32.dp
+    val xxxl = 48.dp
+}
+
+/** Minimum touch target (Material / WCAG 2.5.5): every tappable element is at least this big, even if it draws smaller. */
+object NivoTouch {
+    val min = 48.dp
+}
+
+/** Opacity steps for text and glyphs on tinted or photographic backgrounds, so emphasis reads the same everywhere. */
+object NivoAlpha {
+    const val high = 1f
+    const val medium = 0.74f
+    const val low = 0.56f
+    const val disabled = 0.38f
+    const val hairline = 0.12f
 }
 
 /** Corner radii: Material 3 Expressive favours large outer corners with tighter inner ones. */
@@ -183,6 +203,22 @@ fun nivoTypography(family: FontFamily? = null): Typography {
         labelMedium = style(12, FontWeight.Medium, 0.5),
         labelSmall = style(11, FontWeight.Medium, 0.5),
     )
+}
+
+/**
+ * Tactile press feedback: the element sinks to the motion preset's press scale while [interactionSource] reports a press,
+ * and springs back on release. Pass the same source to the element's `clickable` so the two stay in step.
+ * Reduced motion keeps it still.
+ */
+fun Modifier.pressFeedback(
+    interactionSource: androidx.compose.foundation.interaction.InteractionSource,
+    scale: Float? = null,
+): Modifier = composed {
+    val motion = LocalMotion.current
+    val pressed by interactionSource.collectIsPressedAsState()
+    val target = if (pressed) (scale ?: (1f - (1f - motion.pressScale) * 0.5f)) else 1f
+    val s by animateFloatAsState(target, motion.spring(weight = 1.6f), label = "pressFeedback")
+    graphicsLayer { scaleX = s; scaleY = s }
 }
 
 /** Fades the left and right edges of a horizontally scrolling row, hinting that there is more to reach. */

@@ -96,6 +96,12 @@ import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.ClockStyle
 import com.snapkode.nivolauncher.data.DockStyle
 import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -134,12 +140,14 @@ fun OnboardingFlow(viewModel: LauncherViewModel) {
                     transitionSpec = {
                         val forward = targetState > initialState
                         val ms = motion.duration(380)
-                        (slideInHorizontally(tween(ms)) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(ms))) togetherWith
-                            (slideOutHorizontally(tween(ms)) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(ms / 2)))
+                        // Reduced motion: a plain cross-fade, no sliding.
+                        if (motion.reduced) fadeIn(tween(ms)) togetherWith fadeOut(tween(ms))
+                        else (slideInHorizontally(motion.spring()) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(ms))) togetherWith
+                            (slideOutHorizontally(motion.spring()) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(ms / 2)))
                     },
                     label = "onboardingStep",
                 ) { current ->
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp)) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 28.dp).padding(bottom = NivoSpace.l)) {
                         when (current) {
                             0 -> WelcomeStep(apps.map { it.icon }.take(10))
                             1 -> LookStep(settings, viewModel)
@@ -163,9 +171,16 @@ fun OnboardingFlow(viewModel: LauncherViewModel) {
 @Composable
 private fun BottomBar(step: Int, onBack: () -> Unit, onNext: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.l)) {
         // Progress as segments that fill: you always know how far you are and how far is left.
-        Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = NivoSpace.l)
+                .clearAndSetSemantics {
+                    contentDescription = "Step ${step + 1} of $STEPS"
+                    progressBarRangeInfo = ProgressBarRangeInfo((step + 1).toFloat(), 0f..STEPS.toFloat(), STEPS - 1)
+                },
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             repeat(STEPS) { i ->
                 val fill by animateFloatAsState(if (i <= step) 1f else 0f, tween(LocalMotion.current.duration(400)), label = "seg$i")
                 Box(Modifier.weight(1f).height(4.dp).background(scheme.outlineVariant.copy(alpha = 0.6f), CircleShape)) {
@@ -175,13 +190,20 @@ private fun BottomBar(step: Int, onBack: () -> Unit, onNext: () -> Unit) {
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack, modifier = Modifier.heightIn(min = 56.dp)) {
-                Text(if (step > 0) "Back" else "Skip", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (step > 0) "Back" else "Skip", style = MaterialTheme.typography.titleMedium,
+                    color = if (step > 0) scheme.onSurfaceVariant else scheme.primary,
+                )
             }
-            Spacer(Modifier.weight(1f))
-            Button(onClick = onNext, shape = CircleShape, modifier = Modifier.height(60.dp), contentPadding = ButtonDefaults.ContentPadding) {
+            Spacer(Modifier.weight(1f).widthIn(min = NivoSpace.s))
+            Button(
+                onClick = onNext, shape = CircleShape, modifier = Modifier.heightIn(min = 56.dp),
+                contentPadding = ButtonDefaults.ContentPadding,
+            ) {
                 Text(
                     when { step == 0 -> "Get started"; step < STEPS - 1 -> "Continue"; else -> "Start using Nivo" },
-                    style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 12.dp),
+                    style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = NivoSpace.m),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -194,11 +216,11 @@ private fun StepText(overline: String, title: String, body: String) {
     val scheme = MaterialTheme.colorScheme
     Text(overline, style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 1.8.sp, fontWeight = FontWeight.SemiBold), color = scheme.primary)
     Text(
-        title, Modifier.padding(top = 6.dp).semantics { heading() },
+        title, Modifier.padding(top = NivoSpace.s).semantics { heading() },
         style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Normal, letterSpacing = (-0.6).sp, lineHeight = 44.sp),
         color = scheme.onSurface,
     )
-    Text(body, Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant)
+    Text(body, Modifier.padding(top = NivoSpace.m), style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp), color = scheme.onSurfaceVariant)
 }
 
 // ---- 1. Welcome ---------------------------------------------------------------------------------------------------
@@ -219,7 +241,11 @@ private fun WelcomeStep(icons: List<ImageBitmap>) {
 @Composable
 private fun Pill(icon: ImageVector, text: String) {
     val scheme = MaterialTheme.colorScheme
-    Row(Modifier.background(scheme.surfaceContainerHigh, CircleShape).padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.background(scheme.surfaceContainerHigh, CircleShape).border(1.dp, scheme.outlineVariant, CircleShape)
+            .padding(horizontal = 14.dp, vertical = NivoSpace.s),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Icon(icon, null, Modifier.size(16.dp), tint = scheme.primary)
         Text(text, Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
     }
@@ -233,7 +259,7 @@ private fun IconOrbit(icons: List<ImageBitmap>) {
     val turn by rememberInfiniteTransition(label = "orbit").animateFloat(0f, 360f, infiniteRepeatable(tween(60_000, easing = LinearEasing)), label = "orbitTurn")
     val breathe by rememberInfiniteTransition(label = "breathe").animateFloat(0.94f, 1.04f, infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "breatheScale")
     val angle = if (reduced) 20f else turn
-    Box(Modifier.size(320.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(320.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
         val glow = scheme.primary
         val ring = scheme.outlineVariant
         Canvas(Modifier.fillMaxSize()) {
@@ -271,7 +297,7 @@ private fun LookStep(settings: com.snapkode.nivolauncher.data.LauncherSettings, 
     Spacer(Modifier.height(12.dp))
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { ThemeSwatchPreview() }
     Spacer(Modifier.height(20.dp))
-    StepText("STEP 1 OF 4", "Choose your look", "Light, dark or with the time of day — and an accent. It changes as you tap.")
+    StepText("YOUR LOOK", "Choose your look", "Light, dark or with the time of day — and an accent. It changes as you tap.")
     Spacer(Modifier.height(16.dp))
     ThemeModePicker(settings.themeMode) { v -> viewModel.updateSettings { it.copy(themeMode = v) } }
     AccentPicker("Accent", settings.accent) { v ->
@@ -310,7 +336,7 @@ private fun HomeStep(settings: com.snapkode.nivolauncher.data.LauncherSettings, 
     Spacer(Modifier.height(12.dp))
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { HomeIllustration(settings) }
     Spacer(Modifier.height(20.dp))
-    StepText("STEP 2 OF 4", "Make it home", "Pick a clock and a dock. The phone above is a live preview.")
+    StepText("YOUR HOME", "Make it home", "Pick a clock and a dock. The phone above is a live preview.")
     Spacer(Modifier.height(12.dp))
     ChipPicker("Clock", listOf(ClockStyle.Hero, ClockStyle.Minimal, ClockStyle.Compact, ClockStyle.Off), settings.clockStyle, { it.label }) { v ->
         viewModel.updateSettings { it.copy(clockStyle = v) }
@@ -331,7 +357,7 @@ private enum class Gesture(val title: String, val body: String) {
 @Composable
 private fun GesturesStep() {
     Spacer(Modifier.height(12.dp))
-    StepText("STEP 3 OF 4", "Move with ease", "Five gestures cover almost everything. Each one is shown on its little phone.")
+    StepText("GESTURES", "Move with ease", "Five gestures cover almost everything. Each little phone acts one out.")
     Spacer(Modifier.height(16.dp))
     Gesture.entries.forEachIndexed { i, g -> GestureRow(g, i) }
 }
@@ -339,9 +365,16 @@ private fun GesturesStep() {
 @Composable
 private fun GestureRow(g: Gesture, index: Int) {
     val scheme = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp).background(scheme.surfaceContainerLow, RoundedCornerShape(22.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    val shape = RoundedCornerShape(22.dp)
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp)
+            .background(scheme.surfaceContainerLow, shape).border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), shape)
+            .padding(NivoSpace.m)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         GestureDemo(g, index)
-        Column(Modifier.padding(start = 16.dp)) {
+        Column(Modifier.weight(1f).padding(start = NivoSpace.l)) {
             Text(g.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface)
             Text(g.body, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
         }
@@ -391,7 +424,7 @@ private fun PageletsStep() {
     Spacer(Modifier.height(12.dp))
     Box(Modifier.fillMaxWidth().height(300.dp).padding(top = 8.dp), contentAlignment = Alignment.TopCenter) { PageletFan() }
     Spacer(Modifier.height(20.dp))
-    StepText("STEP 4 OF 4", "Pages that do more", "Pagelets fill a whole page: your day under a living sky, your agenda, the news, your music, your steps. Add one by pressing and holding the home screen.")
+    StepText("PAGELETS", "Pages that do more", "Pagelets fill a whole page: your day under a living sky, your agenda, the news, your music, your steps. Add one by pressing and holding the home screen.")
 }
 
 /** Five little page cards fanned out like a hand of cards. */
@@ -407,7 +440,10 @@ private fun PageletFan() {
         Triple("Music", Brush.verticalGradient(listOf(Color(0xFFFFB347), Color(0xFF2B5876))), Color.White),
         Triple("Move", Brush.verticalGradient(listOf(Color(0xFFD9F5E4), scheme.surface)), scheme.onSurface),
     )
-    Box(Modifier.size(320.dp, 280.dp), contentAlignment = Alignment.TopCenter) {
+    Box(
+        Modifier.size(320.dp, 280.dp).clearAndSetSemantics { contentDescription = "Pagelets: Today, Agenda, Headlines, Music and Move" },
+        contentAlignment = Alignment.TopCenter,
+    ) {
         cards.forEachIndexed { i, (name, bg, fg) ->
             val k = i - 2
             val rot = k * 9f + if (reduced) 0f else sway * 1.5f
@@ -464,8 +500,8 @@ private fun DefaultStep() {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { isDefault = isDefaultHome(context) }
     Spacer(Modifier.height(24.dp))
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        val done by animateFloatAsState(if (isDefault) 1f else 0f, tween(500), label = "homeDone")
-        Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+        val done by animateFloatAsState(if (isDefault) 1f else 0f, tween(LocalMotion.current.duration(500)), label = "homeDone")
+        Box(Modifier.size(160.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
             val ring = scheme.primary
             Canvas(Modifier.fillMaxSize()) {
                 drawCircle(Brush.radialGradient(listOf(ring.copy(alpha = 0.25f), Color.Transparent)), size.minDimension / 2f)
@@ -486,13 +522,23 @@ private fun DefaultStep() {
             else Intent(Settings.ACTION_HOME_SETTINGS)
             runCatching { launcher.launch(intent) }
         },
-        shape = CircleShape, modifier = Modifier.fillMaxWidth().height(56.dp),
-    ) { Text("Set Nivo as home", style = MaterialTheme.typography.titleMedium) }
-    Row(Modifier.padding(top = 20.dp).fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(20.dp)).padding(16.dp), verticalAlignment = Alignment.Top) {
+        shape = CircleShape, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+    ) {
+        Icon(Icons.Filled.Home, null, Modifier.size(20.dp))
+        Spacer(Modifier.width(NivoSpace.s))
+        Text("Set Nivo as home", style = MaterialTheme.typography.titleMedium)
+    }
+    val note = RoundedCornerShape(20.dp)
+    Row(
+        Modifier.padding(top = 20.dp).fillMaxWidth()
+            .background(scheme.surfaceContainerLow, note).border(1.dp, scheme.outlineVariant.copy(alpha = 0.6f), note)
+            .padding(NivoSpace.l),
+        verticalAlignment = Alignment.Top,
+    ) {
         Icon(Icons.Outlined.Lock, null, Modifier.size(20.dp), tint = scheme.primary)
         Text(
             "Nothing else is asked for now. Contacts search, calendar, health and notification dots each ask for their own permission only when you turn them on — and what they read stays on this phone.",
-            Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+            Modifier.padding(start = NivoSpace.m), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
         )
     }
 }

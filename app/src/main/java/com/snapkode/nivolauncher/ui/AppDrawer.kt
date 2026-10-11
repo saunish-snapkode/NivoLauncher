@@ -99,6 +99,29 @@ import com.snapkode.nivolauncher.data.DrawerSort
 import com.snapkode.nivolauncher.data.HomeFolder
 import com.snapkode.nivolauncher.data.SearchTools
 import kotlinx.coroutines.launch
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import com.snapkode.nivolauncher.ui.design.LocalHapticsEnabled
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 
 @Composable
 fun AppDrawer(viewModel: LauncherViewModel, drawer: DrawerState) {
@@ -286,7 +309,7 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                 translationY = (1f - drawer.progress) * size.height
                 // Rounded corners only matter while the sheet is still rising; skip the clip once it is full-screen.
                 if (drawer.progress < 0.995f) {
-                    shape = RoundedCornerShape(topStart = 32.dp * (1f - drawer.progress), topEnd = 32.dp * (1f - drawer.progress))
+                    shape = RoundedCornerShape(topStart = NivoRadius.sheet * (1f - drawer.progress), topEnd = NivoRadius.sheet * (1f - drawer.progress))
                     clip = true
                 }
             }
@@ -296,7 +319,7 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
             .nestedScroll(connection)
     ) {
         Column(Modifier.fillMaxSize().statusBarsPadding().padding(top = settings.drawerTopPadding.dp)) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(NivoSpace.m))
             if (!settings.hideDrawerSearch) {
                 SearchField(
                     query = query,
@@ -324,11 +347,12 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                     "Work apps are paused",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(32.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(NivoSpace.xxl),
+                    textAlign = TextAlign.Center,
                 )
             } else if (searching) {
                 SearchResults(
+                    query = query.trim(),
                     apps = matches.take(8),
                     contacts = contacts,
                     settingsHits = settingsHits,
@@ -344,8 +368,8 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                     columns = GridCells.Fixed(if (listMode) 1 else settings.drawerColumns),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = margin, end = margin + if (settings.drawerScroller) 20.dp else 0.dp, top = 4.dp,
-                        bottom = bottomInsets.asPaddingValues().calculateBottomPadding() + 16.dp,
+                        start = margin, end = margin + if (settings.drawerScroller) 20.dp else 0.dp, top = NivoSpace.xs,
+                        bottom = bottomInsets.asPaddingValues().calculateBottomPadding() + NivoSpace.l,
                     ),
                 ) {
                     if (showFavorites) {
@@ -364,9 +388,9 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                         item(span = { GridItemSpan(maxLineSpan) }, key = "suggested-header") { SectionTitle("Suggested") }
                         item(span = { GridItemSpan(maxLineSpan) }, key = "suggested-row") {
                             Row(
-                                Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-                                    .nivoCard(RoundedCornerShape(24.dp), MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.outlineVariant)
-                                    .padding(vertical = 4.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xs)
+                                    .nivoCard(RoundedCornerShape(NivoRadius.sheet), MaterialTheme.colorScheme.surfaceContainer, MaterialTheme.colorScheme.outlineVariant)
+                                    .padding(vertical = NivoSpace.xs),
                             ) {
                                 predicted.take(settings.drawerColumns).forEach { app ->
                                     Box(Modifier.weight(1f)) {
@@ -395,7 +419,8 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                             is DrawerEntry.Folder -> Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .clickable { openFolderId = entry.folder.id }
+                                    .clip(RoundedCornerShape(NivoRadius.card))
+                                    .clickable(role = Role.Button, onClickLabel = "Open folder") { openFolderId = entry.folder.id }
                                     .padding(vertical = settings.drawerCellPadding.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -415,15 +440,15 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
                     if (settingsHits.isNotEmpty()) {
                         item(span = { GridItemSpan(maxLineSpan) }, key = "settings-header") { SectionTitle("Settings") }
                         items(settingsHits, key = { "setting-${it.action}" }, span = { GridItemSpan(maxLineSpan) }) { entry ->
-                            ResultRow("⚙", entry.title) { viewModel.openSettingsEntry(entry) }
+                            ResultRow("⚙", entry.title, icon = Icons.Outlined.Settings) { viewModel.openSettingsEntry(entry) }
                         }
                     }
                     if (searching && settings.webSearch) {
                         items(suggestions, key = { "suggest-$it" }, span = { GridItemSpan(maxLineSpan) }) { text ->
-                            ResultRow("🔍", text) { viewModel.searchWeb(text) }
+                            ResultRow("🔍", text, icon = Icons.Default.Search) { viewModel.searchWeb(text) }
                         }
                         item(span = { GridItemSpan(maxLineSpan) }, key = "web") {
-                            ResultRow("↗", "Search ${settings.searchProvider.label} for “${query.trim()}”") {
+                            ResultRow("↗", icon = Icons.Outlined.Public, title = "Search ${settings.searchProvider.label} for “${query.trim()}”") {
                                 viewModel.searchWeb(query.trim())
                             }
                         }
@@ -455,26 +480,33 @@ private fun DrawerContent(viewModel: LauncherViewModel, drawer: DrawerState) {
 @Composable
 private fun TabRow(selected: DrawerTab, onSelect: (DrawerTab) -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+    val motion = LocalMotion.current
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = NivoSpace.l, vertical = NivoSpace.xs).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(NivoSpace.m),
+    ) {
         DrawerTab.entries.forEach { tab ->
             val on = tab == selected
+            // Colours cross-fade between tabs instead of snapping.
+            val container by animateColorAsState(if (on) scheme.primary else scheme.surfaceContainerHigh, motion.spring(), label = "tabFill")
+            val content by animateColorAsState(if (on) scheme.onPrimary else scheme.onSurfaceVariant, motion.spring(), label = "tabText")
             Row(
                 Modifier
                     .weight(1f)
-                    .height(48.dp)
-                    .background(if (on) scheme.primary else scheme.surfaceContainerHigh, CircleShape)
+                    .height(NivoTouch.min)
                     .clip(CircleShape)
-                    .clickable { onSelect(tab) },
+                    .background(container)
+                    .selectable(selected = on, role = Role.Tab, onClick = { onSelect(tab) }),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     if (tab == DrawerTab.Personal) Icons.Outlined.Person else Icons.Outlined.BusinessCenter, null,
-                    tint = if (on) scheme.onPrimary else scheme.onSurfaceVariant, modifier = Modifier.size(20.dp),
+                    tint = content, modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    tab.name, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.titleMedium,
-                    color = if (on) scheme.onPrimary else scheme.onSurfaceVariant,
+                    tab.name, Modifier.padding(start = NivoSpace.s), style = MaterialTheme.typography.titleSmall,
+                    color = content, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -484,10 +516,16 @@ private fun TabRow(selected: DrawerTab, onSelect: (DrawerTab) -> Unit) {
 @Composable
 private fun WorkBanner(paused: Boolean, onToggle: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        Modifier.fillMaxWidth().padding(start = NivoSpace.xl, end = NivoSpace.s, top = NivoSpace.xs, bottom = NivoSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(if (paused) "Work profile is off" else "Work profile is on", Modifier.weight(1f))
+        Text(
+            if (paused) "Work profile is off" else "Work profile is on",
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
         androidx.compose.material3.TextButton(onClick = onToggle) { Text(if (paused) "Turn on" else "Pause") }
     }
 }
@@ -507,12 +545,20 @@ private fun FastScroller(
     var height by remember { mutableStateOf(1f) }
     var active by remember { mutableStateOf<Char?>(null) }
     var touchY by remember { mutableStateOf(0f) }
+    // The last letter touched, kept after release so the bubble can shrink away showing it.
+    var lastLetter by remember { mutableStateOf<Char?>(null) }
     val scheme = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
+    val hapticsOn = LocalHapticsEnabled.current
+    val motion = LocalMotion.current
 
     fun jump(y: Float) {
         if (letters.isEmpty()) return
         val letter = letters[(y / height * letters.size).toInt().coerceIn(0, letters.size - 1)]
+        // A light tick each time the finger crosses into a new letter.
+        if (letter != active && hapticsOn) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         active = letter
+        lastLetter = letter
         touchY = y
         val index = entries.indexOfFirst { label ->
             val first = label.firstOrNull()?.uppercaseChar() ?: '#'
@@ -541,19 +587,33 @@ private fun FastScroller(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             letters.forEach { c ->
+                val on = c == active
                 Text(
                     c.toString(),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = if (c == active) scheme.primary else scheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                    ),
+                    // Medium emphasis rather than 60% keeps the letters legible on light themes and over translucent drawers.
+                    color = if (on) scheme.primary else scheme.onSurfaceVariant.copy(alpha = NivoAlpha.medium),
                 )
             }
         }
-        active?.let { c ->
+        // The bubble pops in and out instead of blinking; reduced motion keeps it a plain swap.
+        val bubbleScale by animateFloatAsState(if (active != null) 1f else 0.6f, motion.spring(1.4f), label = "scrollerBubble")
+        val shownLetter = lastLetter
+        if (shownLetter != null && (active != null || (!motion.reduced && bubbleScale > 0.62f))) {
+            val c = shownLetter
             // A teardrop bubble that follows the finger.
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
                     .offset { androidx.compose.ui.unit.IntOffset(-44.dp.roundToPx(), (touchY - 30.dp.toPx()).toInt()) }
+                    .graphicsLayer {
+                        scaleX = bubbleScale; scaleY = bubbleScale
+                        alpha = ((bubbleScale - 0.6f) / 0.4f).coerceIn(0f, 1f)
+                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
+                    }
                     .size(60.dp)
                     .background(scheme.primary, RoundedCornerShape(topStartPercent = 50, bottomStartPercent = 50, bottomEndPercent = 50, topEndPercent = 8)),
                 contentAlignment = Alignment.Center,
@@ -573,14 +633,19 @@ private fun DrawerFolderDialog(
     var name by remember(folder.id) { mutableStateOf(folder.name) }
     val latestName by androidx.compose.runtime.rememberUpdatedState(name)
     DisposableEffect(folder.id) { onDispose { viewModel.renameDrawerFolder(folder.id, latestName) } }
+    val focusManager = LocalFocusManager.current
     Dialog(onDismissRequest = onDismiss) {
-        Surface(shape = RoundedCornerShape(32.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-            Column(Modifier.padding(16.dp)) {
+        Surface(shape = RoundedCornerShape(NivoRadius.sheet), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+            Column(Modifier.padding(NivoSpace.l)) {
                 androidx.compose.material3.OutlinedTextField(
                     value = name, onValueChange = { name = it.take(24) }, singleLine = true,
+                    label = { Text("Folder name") },
+                    textStyle = MaterialTheme.typography.titleMedium,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     modifier = Modifier.fillMaxWidth(),
                 )
-                LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.heightIn(max = 400.dp).padding(top = 8.dp)) {
+                LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.heightIn(max = 400.dp).padding(top = NivoSpace.s)) {
                     items(folder.appIds.mapNotNull(appsById::get), key = { it.id }) { app ->
                         DrawerCell(app, viewModel, settings, isOnHome = viewModel.isOnHome(app.id), folderId = folder.id, emptyMap())
                     }
@@ -588,6 +653,8 @@ private fun DrawerFolderDialog(
                 androidx.compose.material3.TextButton(
                     onClick = { viewModel.deleteDrawerFolder(folder.id); onDismiss() },
                     modifier = Modifier.align(Alignment.End),
+                    // Destructive: it dissolves the folder, so it wears the error colour.
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) { Text("Delete folder") }
             }
         }
@@ -609,14 +676,11 @@ private fun FolderChooser(
         text = {
             Column {
                 folders.values.forEach { folder ->
-                    Text(
-                        folder.name,
-                        Modifier.fillMaxWidth().clickable { viewModel.addToDrawerFolder(folder.id, app.id); onDismiss() }.padding(vertical = 12.dp),
-                    )
+                    NivoChoiceRow(folder.name, Icons.Outlined.Folder) { viewModel.addToDrawerFolder(folder.id, app.id); onDismiss() }
                 }
                 androidx.compose.material3.OutlinedTextField(
                     value = newName, onValueChange = { newName = it.take(24) }, singleLine = true,
-                    label = { Text("New folder") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    label = { Text("New folder") }, modifier = Modifier.fillMaxWidth().padding(top = NivoSpace.s),
                 )
             }
         },
@@ -637,34 +701,65 @@ private fun SearchField(
     focusRequester: FocusRequester,
     onSearch: () -> Unit,
 ) {
+    val scheme = MaterialTheme.colorScheme
+    val motion = LocalMotion.current
+    val focusManager = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    // The hairline warms to the accent while the field has focus, so it is obvious where typing goes.
+    val outline by animateColorAsState(
+        if (focused) scheme.primary.copy(alpha = NivoAlpha.low) else scheme.outlineVariant,
+        motion.spring(),
+        label = "searchOutline",
+    )
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(56.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape).focusRequester(focusRequester),
-        placeholder = { Text("Search your phone and more", style = MaterialTheme.typography.bodyLarge) },
+        modifier = Modifier.fillMaxWidth().padding(horizontal = NivoSpace.l, vertical = NivoSpace.s)
+            // At least the standard 56dp, but free to grow with large system fonts instead of clipping the text.
+            .heightIn(min = 56.dp)
+            .border(1.dp, outline, CircleShape)
+            .onFocusChanged { focused = it.isFocused }
+            .focusRequester(focusRequester),
+        placeholder = {
+            Text(
+                "Search your phone and more", style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        },
         textStyle = MaterialTheme.typography.bodyLarge,
         leadingIcon = {
-            if (query.isNotEmpty()) IconButton(onClick = { onQueryChange("") }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
-            else Icon(Icons.Default.Search, contentDescription = null)
-        },
-        trailingIcon = {
+            // With a query the leading glyph becomes "back": it clears the search and lowers the keyboard.
             if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Clear")
+                IconButton(onClick = { onQueryChange(""); focusManager.clearFocus() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
-            } else Icon(Icons.Default.MoreVert, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            } else Icon(Icons.Default.Search, contentDescription = null)
         },
+        // Only an actionable control lives at the end; an idle glyph there looked tappable but did nothing.
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(onClick = { onQueryChange(""); focusRequester.requestFocus() }) {
+                    Icon(Icons.Default.Close, contentDescription = "Clear search")
+                }
+            }
+        } else null,
         singleLine = true,
         shape = CircleShape,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            focusedContainerColor = scheme.surfaceContainerHigh,
+            unfocusedContainerColor = scheme.surfaceContainerHigh,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
+            focusedPlaceholderColor = scheme.onSurfaceVariant,
+            unfocusedPlaceholderColor = scheme.onSurfaceVariant,
+            focusedLeadingIconColor = scheme.onSurface,
+            unfocusedLeadingIconColor = scheme.onSurfaceVariant,
+            focusedTrailingIconColor = scheme.onSurfaceVariant,
+            unfocusedTrailingIconColor = scheme.onSurfaceVariant,
+            cursorColor = scheme.primary,
         ),
     )
 }
@@ -705,9 +800,10 @@ private fun DrawerCell(
         menu = { expanded, dismiss -> AppMenu(expanded, app, viewModel, extras, dismiss) },
     ) {
         if (list) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.Image(app.icon, app.label, Modifier.size((44 * settings.drawerIconScale).dp))
-                Text(app.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.m), verticalAlignment = Alignment.CenterVertically) {
+                // The label is right beside it (and the cell already carries the name), so the image itself stays silent.
+                androidx.compose.foundation.Image(app.icon, null, Modifier.size((44 * settings.drawerIconScale).dp))
+                Text(app.label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = NivoSpace.l), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         } else {
             AppIconView(app, settings.drawerIconScale, showLabel = settings.showDrawerLabels, onWallpaper = false)
@@ -725,26 +821,40 @@ private fun maxStripCellWidth(columns: Int): androidx.compose.ui.unit.Dp {
 
 @Composable
 private fun SectionTitle(text: String) {
-    SectionLabel(text, Modifier.padding(start = 12.dp, top = 16.dp, bottom = 6.dp))
+    SectionLabel(text, Modifier.padding(start = NivoSpace.m, top = NivoSpace.l, bottom = 6.dp))
 }
 
 @Composable
-private fun ResultRow(badge: String, title: String, onClick: () -> Unit) {
+private fun ResultRow(badge: String, title: String, icon: ImageVector? = null, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            Modifier.size(40.dp).background(scheme.primaryContainer, CircleShape),
             contentAlignment = Alignment.Center,
-        ) { Text(badge, color = MaterialTheme.colorScheme.onPrimaryContainer) }
-        Text(title, Modifier.padding(start = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        ) {
+            // A real glyph where there is one; text badges (contact initials) otherwise.
+            if (icon != null) Icon(icon, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+            else Text(badge, style = MaterialTheme.typography.titleMedium, color = scheme.onPrimaryContainer)
+        }
+        Text(
+            title, Modifier.padding(start = NivoSpace.l).weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
 /** Card-based results: apps strip, contacts, settings, web. Everything searched stays on the device. */
 @Composable
 private fun SearchResults(
+    query: String,
     apps: List<AppInfo>,
     contacts: List<ContactResult>,
     settingsHits: List<SearchTools.SettingsEntry>,
@@ -755,19 +865,24 @@ private fun SearchResults(
     bottomPadding: androidx.compose.ui.unit.Dp,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val cardShape = RoundedCornerShape(28.dp)
+    val cardShape = RoundedCornerShape(NivoRadius.sheet)
+    // Every results card: same tonal fill and hairline as the rest of Nivo, clipped so row ripples follow the corners.
+    val card = Modifier.fillMaxWidth().nivoCard(cardShape, scheme.surfaceContainerLow, scheme.outlineVariant)
     androidx.compose.foundation.lazy.LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomPadding + 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = NivoSpace.l, end = NivoSpace.l, top = NivoSpace.s, bottom = bottomPadding + NivoSpace.l),
+        verticalArrangement = Arrangement.spacedBy(NivoSpace.m),
     ) {
+        if (apps.isEmpty() && contacts.isEmpty() && settingsHits.isEmpty()) item(key = "empty") {
+            NoResults(query, hasWeb = webLabel != null)
+        }
         if (apps.isNotEmpty()) item(key = "apps") {
             Row(
-                Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, cardShape).padding(horizontal = 8.dp, vertical = 16.dp),
+                card.padding(horizontal = NivoSpace.s, vertical = NivoSpace.l),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 apps.take(4).forEach { app ->
-                    Box(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).clickable { viewModel.launch(app) }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.weight(1f).clip(RoundedCornerShape(NivoRadius.control)).clickable(role = Role.Button) { viewModel.launch(app) }, contentAlignment = Alignment.Center) {
                         AppIconView(app, 1f, showLabel = true, onWallpaper = false)
                     }
                 }
@@ -775,51 +890,52 @@ private fun SearchResults(
             }
         }
         if (apps.size > 4) item(key = "more-apps") {
-            Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, cardShape).padding(vertical = 8.dp)) {
+            Column(card.padding(vertical = NivoSpace.s)) {
                 apps.drop(4).forEach { app ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { viewModel.launch(app) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().clickable(role = Role.Button) { viewModel.launch(app) }.padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         androidx.compose.foundation.Image(app.icon, null, Modifier.size(40.dp))
-                        Text(app.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(app.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = NivoSpace.l), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
         }
         if (contacts.isNotEmpty()) item(key = "contacts") {
-            Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, cardShape).padding(vertical = 8.dp)) {
+            Column(card.padding(vertical = NivoSpace.s)) {
                 contacts.forEach { c ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { viewModel.openContact(c) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().clickable(role = Role.Button) { viewModel.openContact(c) }.padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.size(48.dp).background(scheme.tertiaryContainer, CircleShape), contentAlignment = Alignment.Center) {
                             Text(c.name.take(1).uppercase(), style = MaterialTheme.typography.titleLarge, color = scheme.onTertiaryContainer)
                         }
-                        Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                        Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
                             Text(c.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("Contact", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
                         }
-                        Box(Modifier.size(52.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Outlined.Call, "Open ${c.name}", tint = scheme.onPrimaryContainer)
+                        // Decorative: the whole row opens the contact, and its name is already read out.
+                        Box(Modifier.size(NivoTouch.min).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Outlined.Call, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
                         }
                     }
                 }
             }
         }
         if (settingsHits.isNotEmpty()) item(key = "settings") {
-            Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, cardShape).padding(vertical = 8.dp)) {
+            Column(card.padding(vertical = NivoSpace.s)) {
                 settingsHits.forEach { entry ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { viewModel.openSettingsEntry(entry) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().clickable(role = Role.Button) { viewModel.openSettingsEntry(entry) }.padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.size(40.dp).background(scheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
                             Icon(Icons.Outlined.Tune, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                         }
-                        Column(Modifier.padding(start = 16.dp)) {
-                            Text(entry.title, style = MaterialTheme.typography.titleMedium)
+                        Column(Modifier.weight(1f).padding(start = NivoSpace.l)) {
+                            Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("Settings", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
                         }
                     }
@@ -827,16 +943,43 @@ private fun SearchResults(
             }
         }
         if (suggestions.isNotEmpty() || webLabel != null) item(key = "web") {
-            Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, cardShape).padding(vertical = 8.dp)) {
-                suggestions.forEach { text -> ResultRow("🔍", text) { viewModel.searchWeb(text) } }
-                if (webLabel != null) ResultRow("↗", webLabel, onWeb)
+            Column(card.padding(vertical = NivoSpace.s)) {
+                suggestions.forEach { text -> ResultRow("🔍", text, icon = Icons.Default.Search) { viewModel.searchWeb(text) } }
+                if (webLabel != null) ResultRow("↗", webLabel, icon = Icons.Outlined.Public, onClick = onWeb)
             }
         }
         item(key = "footer") {
-            Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = NivoSpace.l), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Shield, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                Text("Results from this device only", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp))
+                Text("Results from this device only", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(start = NivoSpace.s))
             }
         }
+    }
+}
+
+/** Nothing on the device matched: say so plainly and point at what still works, instead of an empty page. */
+@Composable
+private fun NoResults(query: String, hasWeb: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(64.dp).background(scheme.surfaceContainerHigh, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Outlined.SearchOff, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(28.dp)) }
+        Text(
+            "No apps match “$query”",
+            style = MaterialTheme.typography.titleMedium, color = scheme.onSurface,
+            textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = NivoSpace.l),
+        )
+        Text(
+            if (hasWeb) "Check the spelling, or search the web below." else "Check the spelling, or try fewer letters.",
+            style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = NivoSpace.xs),
+        )
     }
 }

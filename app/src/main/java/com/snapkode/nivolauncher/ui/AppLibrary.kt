@@ -66,12 +66,33 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.pressFeedback
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private fun lerp(a: Float, b: Float, t: Float) = a + (b - a) * t
 
 private enum class LibraryFilter(val label: String) { All("All"), Auto("Auto-sorted"), Recent("Recent"), Hidden("Hidden") }
+
+/** "1 app", "3 apps": counts read naturally instead of "1 apps". */
+private fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
 
 /**
  * The Nivo App Library: every app sorted into editable categories. Tap a card to expand it from
@@ -121,36 +142,43 @@ fun LibraryPage(viewModel: LauncherViewModel, modifier: Modifier = Modifier) {
     ) {
     Box(modifier.fillMaxSize().onGloballyPositioned { pageRect = it.boundsInRoot() }) {
         Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 32.dp, bottom = 8.dp)) {
-                Text("Library", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onSurface)
+            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = NivoSpace.xxl, bottom = NivoSpace.s)) {
                 Text(
-                    "${groups.sumOf { it.apps.size }} apps in ${groups.size} categories",
+                    "Library", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Text(
+                    "${plural(groups.sumOf { it.apps.size }, "app")} in ${plural(groups.size, "category", "categories")}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = NivoSpace.xxs),
                 )
             }
             Row(
                 Modifier
                     .then(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState()))
-                    .padding(horizontal = 16.dp).padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = NivoSpace.l).padding(top = NivoSpace.xs),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.s),
             ) {
                 LibraryFilter.entries.forEach { f ->
                     androidx.compose.material3.FilterChip(
                         selected = filter == f,
                         onClick = { filter = f },
                         label = { Text(f.label, maxLines = 1, softWrap = false) },
-                        shape = RoundedCornerShape(16.dp),
+                        shape = NivoShapes.Pill,
                         leadingIcon = if (filter == f) {
                             { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) }
                         } else null,
                     )
                 }
             }
-            LazyColumn(
+            if (groups.isEmpty()) {
+                LibraryEmpty(filter)
+            } else LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                contentPadding = PaddingValues(start = NivoSpace.l, end = NivoSpace.l, top = NivoSpace.m, bottom = 96.dp),
+                // Each category is its own card now, so give them room to read as separate objects.
+                verticalArrangement = Arrangement.spacedBy(NivoSpace.s),
             ) {
                 itemsIndexed(groups, key = { _, g -> g.id }) { index, group ->
                     CategoryCard(
@@ -178,26 +206,41 @@ fun LibraryPage(viewModel: LauncherViewModel, modifier: Modifier = Modifier) {
             val width = lerp(start.width, full.width, t)
             val height = lerp(start.height, full.height, t)
             // Everything else recedes while the card grows.
-            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f * t)).clickable(enabled = t > 0.5f) { close() })
+            Box(
+                Modifier.fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f * t))
+                    .clickable(interactionSource = null, indication = null, enabled = t > 0.5f, onClickLabel = "Close ${group.name}") { close() }
+            )
             Box(
                 Modifier
                     .offset { IntOffset(left.roundToInt(), top.roundToInt()) }
                     .size(with(density) { width.toDp() }, with(density) { height.toDp() })
-                    .clip(RoundedCornerShape(lerp(28f, 0f, t).dp))
+                    .clip(RoundedCornerShape(lerp(NivoRadius.sheet.value, 0f, t).dp))
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 Column(Modifier.fillMaxSize().alpha(((t - 0.35f) / 0.65f).coerceIn(0f, 1f)).statusBarsPadding()) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 28.dp, end = NivoSpace.l, top = 20.dp, bottom = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Column(Modifier.weight(1f)) {
-                            Text(group.name, style = MaterialTheme.typography.headlineLarge)
-                            Text("${group.apps.size} apps", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                group.name, style = MaterialTheme.typography.headlineLarge,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                            Text(
+                                plural(group.apps.size, "app"), style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = NivoSpace.xxs),
+                            )
                         }
-                        TextButton(onClick = { close() }) { Text("Done") }
+                        TextButton(onClick = { close() }, modifier = Modifier.padding(start = NivoSpace.s)) { Text("Done") }
                     }
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(settings.drawerColumns),
                         modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        contentPadding = PaddingValues(start = NivoSpace.s, end = NivoSpace.s, top = NivoSpace.xs, bottom = NivoSpace.l),
                     ) {
                         items(group.apps, key = { it.id }) { app ->
                             LibraryApp(app, group, groups, viewModel, settings.drawerIconScale, settings.showDrawerLabels)
@@ -223,38 +266,55 @@ private fun CategoryCard(
     var menu by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     val scheme = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
+    val reduced = LocalMotion.current.reduced
     Box(
         modifier
             .fillMaxWidth()
+            // A large card only needs a slight give; reduced motion keeps it still.
+            .pressFeedback(press, scale = if (reduced) 1f else 0.98f)
             .clip(shape)
             .background(if (highlighted) scheme.primaryContainer else scheme.surfaceContainer)
             .border(1.dp, if (highlighted) scheme.primary.copy(alpha = 0.35f) else scheme.outlineVariant, shape)
-            .combinedClickable(onClick = onOpen, onLongClick = { menu = true })
-            .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 16.dp)
+            .combinedClickable(
+                interactionSource = press,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClickLabel = "Open ${group.name}",
+                onLongClickLabel = "${group.name} options",
+                onLongClick = { menu = true },
+                onClick = onOpen,
+            )
+            .padding(start = 20.dp, end = NivoSpace.m, top = NivoSpace.l, bottom = NivoSpace.l)
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    group.name, style = MaterialTheme.typography.titleLarge,
-                    color = if (highlighted) scheme.onPrimaryContainer else scheme.onSurface,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${group.apps.size}", style = MaterialTheme.typography.titleMedium,
-                    color = if (highlighted) scheme.primary else scheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 12.dp).weight(1f),
-                )
+                // A long name ellipsises but never pushes the count or the chevron off the card.
+                Row(Modifier.weight(1f).padding(end = NivoSpace.s), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        group.name, style = MaterialTheme.typography.titleLarge,
+                        color = if (highlighted) scheme.onPrimaryContainer else scheme.onSurface,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Text(
+                        "${group.apps.size}", style = MaterialTheme.typography.titleMedium,
+                        color = if (highlighted) scheme.primary else scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = NivoSpace.m),
+                    )
+                }
                 Box(
                     Modifier.size(44.dp).background(if (highlighted) scheme.primary.copy(alpha = 0.3f) else scheme.surfaceContainerHighest, CircleShape),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Icons.Default.ChevronRight, "Open ${group.name}", tint = if (highlighted) scheme.onPrimaryContainer else scheme.onSurface) }
+                ) { Icon(Icons.Default.ChevronRight, null, tint = if (highlighted) scheme.onPrimaryContainer else scheme.onSurface) }
             }
             // A row of real icons you can tap to launch without opening the category.
-            Row(Modifier.padding(top = 14.dp, end = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.padding(top = 14.dp, end = NivoSpace.s), horizontalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
                 group.apps.take(5).forEach { app ->
                     androidx.compose.foundation.Image(
                         app.icon, app.label,
-                        Modifier.size(50.dp).clip(CircleShape).clickable { viewModel.launch(app) },
+                        Modifier.size(50.dp).clip(CircleShape).clickable(role = Role.Button, onClickLabel = "Open") { viewModel.launch(app) },
                     )
                 }
             }
@@ -274,7 +334,15 @@ private fun CategoryCard(
         AlertDialog(
             onDismissRequest = { renaming = false },
             title = { Text("Rename category") },
-            text = { OutlinedTextField(value = text, onValueChange = { text = it.take(24) }, singleLine = true) },
+            text = {
+                OutlinedTextField(
+                    value = text, onValueChange = { text = it.take(24) }, singleLine = true,
+                    label = { Text("Category name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { viewModel.renameCategory(group.id, text); renaming = false }),
+                )
+            },
             confirmButton = { TextButton(onClick = { viewModel.renameCategory(group.id, text); renaming = false }) { Text("Save") } },
             dismissButton = { TextButton(onClick = { viewModel.renameCategory(group.id, ""); renaming = false }) { Text("Reset") } },
         )
@@ -294,7 +362,11 @@ private fun LibraryApp(
     var menu by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf(false) }
     Box(
-        Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.launch(app) }, onLongClick = { menu = true }).padding(vertical = 10.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(NivoRadius.card))
+            .combinedClickable(onClickLabel = "Open", onLongClickLabel = "More options", onClick = { viewModel.launch(app) }, onLongClick = { menu = true })
+            .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
         AppIconView(app, scale, showLabel, onWallpaper = false)
@@ -311,18 +383,18 @@ private fun LibraryApp(
         var newName by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { moving = false },
-            title = { Text("Move ${app.label} to") },
+            title = { Text("Move ${app.label} to", maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
                 Column {
-                    groups.filter { it.id != group.id }.forEach { g ->
-                        Text(
-                            g.name,
-                            Modifier.fillMaxWidth().clickable { viewModel.moveAppToCategory(app.id, g.id); moving = false }.padding(vertical = 12.dp),
-                        )
+                    // Long category lists scroll inside the dialog instead of pushing the buttons off-screen.
+                    Column(Modifier.weight(1f, fill = false).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                        groups.filter { it.id != group.id }.forEach { g ->
+                            NivoChoiceRow(g.name, Icons.Outlined.Folder) { viewModel.moveAppToCategory(app.id, g.id); moving = false }
+                        }
                     }
                     OutlinedTextField(
                         value = newName, onValueChange = { newName = it.take(24) }, singleLine = true,
-                        label = { Text("New category") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        label = { Text("New category") }, modifier = Modifier.fillMaxWidth().padding(top = NivoSpace.s),
                     )
                 }
             },
@@ -335,5 +407,40 @@ private fun LibraryApp(
             },
             dismissButton = { TextButton(onClick = { moving = false }) { Text("Cancel") } },
         )
+    }
+}
+
+/** Shown when a filter has nothing in it (no hidden apps, nothing installed lately) instead of a blank page. */
+@Composable
+private fun LibraryEmpty(filter: LibraryFilter) {
+    val scheme = MaterialTheme.colorScheme
+    val (title, body) = when (filter) {
+        LibraryFilter.Hidden -> "No hidden apps" to "Apps you hide from the drawer will be listed here."
+        LibraryFilter.Recent -> "Nothing new yet" to "Apps you install will show up here first."
+        else -> "No categories to show" to "Your apps will be sorted into categories as soon as they load."
+    }
+    val icon = when (filter) {
+        LibraryFilter.Hidden -> Icons.Outlined.VisibilityOff
+        LibraryFilter.Recent -> Icons.Outlined.Schedule
+        else -> Icons.Outlined.Category
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xxl, vertical = NivoSpace.xxxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(64.dp).background(scheme.surfaceContainerHigh, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(28.dp)) }
+        Text(
+            title, style = MaterialTheme.typography.titleMedium, color = scheme.onSurface,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.l),
+        )
+        Text(
+            body, style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurfaceVariant,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.xs),
+        )
+        Spacer(Modifier.height(NivoSpace.xxxl))
     }
 }

@@ -82,6 +82,20 @@ import androidx.core.graphics.drawable.toBitmap
 import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.HomeItem
 import com.snapkode.nivolauncher.data.appWidgetIdOf
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -209,6 +223,9 @@ fun WidgetCell(
     // While a handle is being dragged the content follows the frame pixel by pixel.
     val liveW = with(density) { (width.toPx() + edges[2] - edges[0]).coerceAtLeast(cellWidthPx * 0.6f).toDp() }
     val liveH = with(density) { (height.toPx() + edges[3] - edges[1]).coerceAtLeast(cellHeightPx * 0.6f).toDp() }
+    // Lifting eases in and settles back instead of snapping; the drag offset itself stays 1:1 with the finger.
+    val motion = LocalMotion.current
+    val lift by animateFloatAsState(if (lifted) 1f else 0f, motion.spring(weight = 1.4f), label = "widgetLift")
     Box(
         modifier
             .onGloballyPositioned {
@@ -221,9 +238,9 @@ fun WidgetCell(
             .graphicsLayer {
                 translationX = moveOffset.x
                 translationY = moveOffset.y
-                val s = if (lifted) 1.04f else 1f
+                val s = 1f + 0.04f * lift
                 scaleX = s; scaleY = s
-                alpha = if (lifted) 0.92f else 1f
+                alpha = 1f - 0.08f * lift
             }
             .size(width, height)
             .padding(4.dp)
@@ -271,7 +288,7 @@ fun WidgetCell(
                     .wrapContentSize(Alignment.TopStart, unbounded = true)
                     .offset { IntOffset(edges[0].roundToInt(), edges[1].roundToInt()) }
                     .size(liveW - 8.dp, liveH - 8.dp)
-                    .then(if (rounded) Modifier.clip(RoundedCornerShape(20.dp)) else Modifier),
+                    .then(if (rounded) Modifier.clip(RoundedCornerShape(NivoRadius.card)) else Modifier),
                 factory = { context ->
                     GestureFrame(context).apply {
                         val host: AppWidgetHostView = viewModel.widgetHost.createView(context, appWidgetId, info)
@@ -361,15 +378,17 @@ private fun ResizeFrame(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
     val accent = MaterialTheme.colorScheme.primary
     val frameOffset = IntOffset(edges[0].roundToInt(), edges[1].roundToInt())
+    val frameShape = RoundedCornerShape(NivoRadius.card)
     Box(modifier) {
         Box(
             Modifier
                 .offset { frameOffset }
                 .matchSizeWithEdges(edges)
-                .border(2.dp, accent, RoundedCornerShape(20.dp))
+                // A faint accent wash shows the area the widget will take; the crisp 2dp line marks its bounds.
+                .background(accent.copy(alpha = 0.08f), frameShape)
+                .border(2.dp, accent, frameShape)
         ) {
             Handle(Edge.Left, accent, Alignment.CenterStart, onEdgeDrag, onEdgeEnd)
             Handle(Edge.Right, accent, Alignment.CenterEnd, onEdgeDrag, onEdgeEnd)
@@ -377,7 +396,7 @@ private fun ResizeFrame(
             Handle(Edge.Bottom, accent, Alignment.BottomCenter, onEdgeDrag, onEdgeEnd)
             Row(
                 Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.s),
             ) {
                 FrameButton(Icons.Default.Check, accent, "Done resizing", onDone)
             }
@@ -404,20 +423,40 @@ private fun Handle(
     onEnd: () -> Unit,
 ) {
     val horizontal = edge == Edge.Left || edge == Edge.Right
+    var active by remember { mutableStateOf(false) }
+    val motion = LocalMotion.current
+    // The grip grows a little while held, so the finger gets a clear "got it".
+    val grip by animateDpAsState(if (active) 36.dp else 26.dp, motion.spring(weight = 1.4f), label = "handleGrip")
+    val thick = 6.dp
     Box(
         Modifier
             .fillMaxSizeFor(edge)
             .wrapContentSizeAt(alignment)
-            .size(48.dp)
+            .size(NivoTouch.min)
             .semantics { contentDescription = "Resize ${edge.name.lowercase()} edge" }
             .pointerInput(edge) {
-                detectDragGestures(onDragEnd = onEnd, onDragCancel = onEnd) { change, amount ->
+                // Typed up front so overload resolution picks the classic (Offset) / () callbacks.
+                val start: (Offset) -> Unit = { active = true }
+                val end: () -> Unit = { active = false; onEnd() }
+                detectDragGestures(onDragStart = start, onDragEnd = end, onDragCancel = end) { change, amount ->
                     change.consume()
                     onDrag(edge, if (horizontal) amount.x else amount.y)
                 }
             },
-        contentAlignment = Alignment.Center,
-    ) { Box(Modifier.size(12.dp).border(2.dp, MaterialTheme.colorScheme.surface, CircleShape).background(color, CircleShape)) }
+        contentAlignment = alignment,
+    ) {
+        // A pill grip that straddles the frame line (half in, half out), parallel to the edge it moves.
+        val nudgeX = when (edge) { Edge.Left -> -thick / 2; Edge.Right -> thick / 2; else -> 0.dp }
+        val nudgeY = when (edge) { Edge.Top -> -thick / 2; Edge.Bottom -> thick / 2; else -> 0.dp }
+        Box(
+            Modifier
+                .offset(x = nudgeX, y = nudgeY)
+                .size(width = if (horizontal) thick else grip, height = if (horizontal) grip else thick)
+                .shadow(2.dp, CircleShape)
+                .background(color, CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.9f), CircleShape)
+        )
+    }
 }
 
 private fun Modifier.fillMaxSizeFor(edge: Edge): Modifier = this.then(Modifier.fillMaxSize())
@@ -426,10 +465,22 @@ private fun Modifier.wrapContentSizeAt(alignment: Alignment): Modifier =
 
 @Composable
 private fun FrameButton(icon: androidx.compose.ui.graphics.vector.ImageVector, color: androidx.compose.ui.graphics.Color, description: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    // 48dp touch target around a 40dp visible disc.
     Box(
-        Modifier.size(36.dp).shadow(3.dp, CircleShape).background(color, CircleShape).clickable(onClick = onClick),
+        Modifier
+            .size(NivoTouch.min)
+            .pressFeedback(interaction)
+            .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, contentDescription = description, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(20.dp)) }
+    ) {
+        Box(
+            Modifier.size(40.dp).shadow(4.dp, CircleShape).background(color, CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp)) }
+    }
 }
 
 @Composable
@@ -458,45 +509,72 @@ fun WidgetPicker(viewModel: LauncherViewModel, onDismiss: () -> Unit) {
         Box(Modifier.fillMaxSize().clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null, onClick = onDismiss), contentAlignment = Alignment.BottomCenter) {
             Surface(
                 Modifier.fillMaxWidth().fillMaxHeight(0.92f).clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) {},
-                shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+                shape = RoundedCornerShape(topStart = NivoRadius.sheet, topEnd = NivoRadius.sheet),
                 color = scheme.surfaceContainerLow,
+                border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant),
             ) {
-                Column(Modifier.padding(horizontal = 16.dp).navigationBarsPadding()) {
-                    Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp).size(width = 36.dp, height = 4.dp).background(scheme.outline, CircleShape))
-                    Text("Widgets", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = 16.dp))
+                Column(Modifier.padding(horizontal = NivoSpace.l).navigationBarsPadding()) {
+                    Box(Modifier.align(Alignment.CenterHorizontally).padding(top = NivoSpace.m).size(width = 32.dp, height = 4.dp).background(scheme.onSurfaceVariant.copy(alpha = 0.4f), CircleShape))
+                    Text(
+                        "Widgets", style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.align(Alignment.CenterHorizontally).padding(vertical = NivoSpace.l).semantics { heading() },
+                    )
                     androidx.compose.material3.TextField(
                         value = query, onValueChange = { query = it }, singleLine = true,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
-                        placeholder = { Text("Search widgets") },
-                        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, null) },
+                        placeholder = { Text("Search widgets", maxLines = 1) },
+                        leadingIcon = { Icon(androidx.compose.material.icons.Icons.Default.Search, null, tint = scheme.onSurfaceVariant) },
+                        trailingIcon = if (query.isNotEmpty()) {
+                            {
+                                androidx.compose.material3.IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Clear search", tint = scheme.onSurfaceVariant)
+                                }
+                            }
+                        } else null,
                         shape = CircleShape,
                         colors = androidx.compose.material3.TextFieldDefaults.colors(
                             focusedContainerColor = scheme.surfaceContainerHigh, unfocusedContainerColor = scheme.surfaceContainerHigh,
                             focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent, unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                         ),
                     )
-                    LazyColumn(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LazyColumn(
+                        Modifier.fillMaxSize().padding(top = NivoSpace.m),
+                        verticalArrangement = Arrangement.spacedBy(NivoSpace.xs),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = NivoSpace.l),
+                    ) {
                         if (query.isBlank() || "clock".contains(query, true) || "nivo".contains(query, true)) item(key = "nivo") {
                             NivoWidgetGroup(onAddClock = { onDismiss(); viewModel.addNivoClock() })
                         }
                         items(groups.size, key = { groups[it].first }) { i ->
                             val (pkg, name, list) = groups[i]
                             val open = expanded == pkg
-                            val shape = RoundedCornerShape(if (open) 28.dp else 12.dp)
-                            Column(Modifier.fillMaxWidth().background(scheme.surfaceContainer, shape).clip(shape)) {
+                            val motion = LocalMotion.current
+                            val corner by animateDpAsState(if (open) NivoRadius.hero else NivoRadius.control, motion.spring(), label = "groupCorner")
+                            val chevron by animateFloatAsState(if (open) 180f else 0f, motion.spring(), label = "groupChevron")
+                            val shape = RoundedCornerShape(corner)
+                            Column(
+                                Modifier.fillMaxWidth()
+                                    .background(if (open) scheme.surfaceContainerHigh else scheme.surfaceContainer, shape)
+                                    .clip(shape)
+                                    .animateContentSize(motion.spring()),
+                            ) {
                                 Row(
-                                    Modifier.fillMaxWidth().clickable { expanded = if (open) null else pkg }.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    Modifier.fillMaxWidth().heightIn(min = 64.dp)
+                                        .semantics { stateDescription = if (open) "Expanded" else "Collapsed" }
+                                        .clickable(role = Role.Button, onClickLabel = if (open) "Hide widgets" else "Show widgets") { expanded = if (open) null else pkg }
+                                        .padding(horizontal = NivoSpace.l, vertical = NivoSpace.m),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     val icon = remember(pkg) { runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(120, 120).asImageBitmap() }.getOrNull() }
                                     if (icon != null) Image(icon, null, Modifier.size(40.dp).clip(CircleShape)) else Box(Modifier.size(40.dp))
-                                    Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                                        Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                                        Text("${list.size} ${if (list.size == 1) "widget" else "widgets"}", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+                                    Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
+                                        Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${list.size} ${if (list.size == 1) "widget" else "widgets"}", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1)
                                     }
                                     Icon(
-                                        if (open) androidx.compose.material.icons.Icons.Default.KeyboardArrowUp else androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
+                                        androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                                         null, tint = scheme.onSurfaceVariant,
+                                        modifier = Modifier.graphicsLayer { rotationZ = chevron },
                                     )
                                 }
                                 if (open) list.forEach { (info, label, work) ->
@@ -520,17 +598,22 @@ private fun ProviderRow(info: AppWidgetProviderInfo, label: String, app: String,
     val preview = remember(info) {
         runCatching { (info.loadPreviewImage(context, density) ?: info.loadIcon(context, density))?.toBitmap(240, 240)?.asImageBitmap() }.getOrNull()
     }
+    val scheme = MaterialTheme.colorScheme
+    val tile = RoundedCornerShape(NivoRadius.card)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Add widget", onClick = onClick).padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(NivoSpace.l),
     ) {
-        Box(Modifier.size(88.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(20.dp)), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(88.dp).background(scheme.surfaceContainerHighest, tile).border(1.dp, scheme.outlineVariant, tile),
+            contentAlignment = Alignment.Center,
+        ) {
             if (preview != null) Image(preview, null, Modifier.size(72.dp))
         }
-        Column {
-            Text(label, style = MaterialTheme.typography.titleMedium)
-            Text(app, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(app, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -546,26 +629,26 @@ private fun appLabel(context: Context, info: AppWidgetProviderInfo): String =
 private fun NivoWidgetGroup(onAddClock: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(NivoRadius.hero)
     Column(Modifier.fillMaxWidth().background(scheme.surfaceContainer, shape).clip(shape)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.l, vertical = NivoSpace.m), verticalAlignment = Alignment.CenterVertically) {
             val icon = remember { runCatching { context.packageManager.getApplicationIcon(context.packageName).toBitmap(120, 120).asImageBitmap() }.getOrNull() }
             if (icon != null) Image(icon, null, Modifier.size(40.dp).clip(CircleShape)) else Box(Modifier.size(40.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                Text("Nivo Launcher", style = MaterialTheme.typography.titleMedium, maxLines = 1)
+            Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
+                Text("Nivo Launcher", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("1 widget", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
             }
         }
         Row(
-            Modifier.fillMaxWidth().clickable(onClick = onAddClock).padding(horizontal = 16.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().clickable(role = Role.Button, onClickLabel = "Add widget", onClick = onAddClock).padding(horizontal = NivoSpace.l, vertical = NivoSpace.s),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(NivoSpace.l),
         ) {
             // A still of the widget, so the picker shows what you are getting.
             Column(
-                Modifier.size(width = 120.dp, height = 88.dp).clip(RoundedCornerShape(20.dp))
-                    .background(Brush.verticalGradient(listOf(scheme.surfaceContainerHighest, scheme.surfaceContainerHigh)), RoundedCornerShape(20.dp))
-                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(20.dp))
+                Modifier.size(width = 120.dp, height = 88.dp).clip(RoundedCornerShape(NivoRadius.card))
+                    .background(Brush.verticalGradient(listOf(scheme.surfaceContainerHighest, scheme.surfaceContainerHigh)), RoundedCornerShape(NivoRadius.card))
+                    .border(1.dp, scheme.outlineVariant, RoundedCornerShape(NivoRadius.card))
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -577,11 +660,11 @@ private fun NivoWidgetGroup(onAddClock: () -> Unit) {
                 }
                 Box(Modifier.fillMaxWidth().height(2.dp).background(scheme.onSurface.copy(alpha = 0.10f), CircleShape))
             }
-            Column {
-                Text("Clock", style = MaterialTheme.typography.titleMedium)
-                Text("Animated time and date", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+            Column(Modifier.weight(1f)) {
+                Text("Clock", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("Animated time and date", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(NivoSpace.s))
     }
 }

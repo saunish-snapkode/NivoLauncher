@@ -42,6 +42,14 @@ import com.snapkode.nivolauncher.lasso.RadialLayout
 import com.snapkode.nivolauncher.lasso.RadialPlacement
 import com.snapkode.nivolauncher.ui.design.LocalMotion
 import com.snapkode.nivolauncher.ui.design.nivoCard
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoElevation
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -123,7 +131,7 @@ private fun RadialButton(
     }
     val half = with(density) { RadialMetrics.button.toPx() } / 2f
     val tint = when {
-        !spec.enabled -> scheme.onSurface.copy(alpha = 0.35f)
+        !spec.enabled -> scheme.onSurface.copy(alpha = NivoAlpha.disabled)
         spec.destructive -> scheme.error
         spec.selected -> scheme.primary
         else -> scheme.onSurface
@@ -146,12 +154,23 @@ private fun RadialButton(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box {
+            val interaction = remember { MutableInteractionSource() }
             Box(
                 Modifier
                     .size(RadialMetrics.button)
-                    .nivoCard(CircleShape, scheme.surfaceContainerHigh.copy(alpha = 0.97f), if (spec.selected) scheme.primary else scheme.outlineVariant)
-                    .clickable(enabled = spec.enabled, role = Role.Button, onClick = spec.onClick)
-                    .semantics { contentDescription = spec.label },
+                    .pressFeedback(interaction)
+                    // Lifted off the wallpaper so the ring reads as one floating set of controls.
+                    .shadow(NivoElevation.modal, CircleShape)
+                    .nivoCard(
+                        CircleShape,
+                        if (spec.selected) scheme.primaryContainer else scheme.surfaceContainerHigh,
+                        if (spec.selected) scheme.primary else scheme.outlineVariant,
+                    )
+                    .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), enabled = spec.enabled, role = Role.Button, onClick = spec.onClick)
+                    .semantics {
+                        contentDescription = spec.label
+                        if (spec.selected) stateDescription = "On"
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 androidx.compose.material3.Icon(spec.icon, null, Modifier.size(22.dp), tint = tint)
@@ -161,13 +180,16 @@ private fun RadialButton(
         androidx.compose.material3.Text(
             spec.label,
             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-            color = tint,
+            // Labels stay full-strength (except when disabled) so they read on any wallpaper; colour is carried by the icon.
+            color = if (!spec.enabled) tint else if (spec.destructive) scheme.error else scheme.onSurface,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .padding(top = 4.dp)
-                .clip(RoundedCornerShape(50))
-                .nivoCard(RoundedCornerShape(50), scheme.surfaceContainerHigh.copy(alpha = 0.9f), scheme.outlineVariant.copy(alpha = 0.6f))
-                .padding(horizontal = 8.dp, vertical = 2.dp),
+                // The button already carries this name; don't let a screen reader say it twice.
+                .clearAndSetSemantics { }
+                .nivoCard(RoundedCornerShape(50), scheme.surfaceContainerHigh.copy(alpha = 0.94f), scheme.outlineVariant.copy(alpha = 0.6f))
+                .padding(horizontal = 8.dp, vertical = 1.dp),
         )
     }
 }

@@ -1,6 +1,21 @@
 package com.snapkode.nivolauncher.ui.pagelet
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.ui.text.style.TextOverflow
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
+import com.snapkode.nivolauncher.ui.design.pressFeedback
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -101,8 +116,10 @@ fun PageletGallerySheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp),
             )
             LazyRow(
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                // Extra room on top for the selected card's lift, so it never clips.
+                modifier = Modifier.selectableGroup(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(start = NivoSpace.xl, end = NivoSpace.xl, top = 20.dp, bottom = NivoSpace.l),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.m),
             ) {
                 items(PageletType.entries.filter { it != PageletType.FOCUS }) { type ->
                     TemplateCard(type, selected = type == selected, taken = type in taken) {
@@ -120,10 +137,17 @@ fun PageletGallerySheet(
             if (selected == PageletType.HEADLINES) HeadlinesPageletOptions(config, onChange = { config = it }, checkFeed)
             else if (selected.available && selected != PageletType.SKY) SimplePageletOptions(selected, config, onChange = { config = it })
 
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                Spacer(Modifier.width(8.dp))
-                Button(onClick = { onAdd(selected, config) }, enabled = selected.available && selected !in taken) { Text("Add") }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.m),
+                horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = NivoTouch.min)) { Text("Cancel") }
+                Spacer(Modifier.width(NivoSpace.s))
+                Button(onClick = { onAdd(selected, config) }, enabled = selected.available && selected !in taken, modifier = Modifier.heightIn(min = NivoTouch.min)) {
+                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(NivoSpace.xs))
+                    Text("Add ${selected.title}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
@@ -158,9 +182,12 @@ fun PageletOptionsSheet(
                 Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (onRemove != null) TextButton(onClick = onRemove, contentPadding = androidx.compose.foundation.layout.PaddingValues(end = 12.dp, top = 8.dp, bottom = 8.dp)) { Text("Remove Pagelet", color = MaterialTheme.colorScheme.error) }
+                if (onRemove != null) TextButton(
+                    onClick = onRemove, modifier = Modifier.heightIn(min = NivoTouch.min),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(end = NivoSpace.m, top = NivoSpace.s, bottom = NivoSpace.s),
+                ) { Text("Remove Pagelet", color = MaterialTheme.colorScheme.error, maxLines = 1) }
                 else Spacer(Modifier.width(1.dp))
-                Button(onClick = onDismiss) { Text("Done") }
+                Button(onClick = onDismiss, modifier = Modifier.heightIn(min = NivoTouch.min)) { Text("Done") }
             }
         }
     }
@@ -169,24 +196,41 @@ fun PageletOptionsSheet(
 @Composable
 private fun TemplateCard(type: PageletType, selected: Boolean, taken: Boolean = false, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val lift = if (selected) (-6).dp else 0.dp
+    val motion = LocalMotion.current
+    // The chosen card rises a little and gains its ring; both ease rather than jump.
+    val lift by animateDpAsState(if (selected && !motion.reduced) (-6).dp else 0.dp, motion.spring(1f), label = "templateLift")
+    val ring by animateDpAsState(if (selected) 3.dp else 1.dp, motion.spring(1f), label = "templateRing")
+    val shape = RoundedCornerShape(NivoRadius.card + 4.dp)
+    val enabled = type.available && !taken
+    val press = remember { MutableInteractionSource() }
+    val onPreview = if (type == PageletType.SKY) Color.White else scheme.onSurface
     Box(
         Modifier
             .offset(y = lift)
+            .pressFeedback(press)
             .size(132.dp, 262.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .then(if (selected) Modifier.border(3.dp, scheme.primary, RoundedCornerShape(24.dp)) else Modifier)
-            .alpha(if (type.available && !taken) 1f else 0.55f)
-            .clickable(enabled = type.available && !taken, role = Role.RadioButton, onClick = onClick)
-            .semantics { this.selected = selected; contentDescription = type.title + if (taken) ", already added" else if (type.available) "" else ", coming soon" },
+            .clip(shape)
+            .border(ring, if (selected) scheme.primary else scheme.outlineVariant, shape)
+            .alpha(if (enabled) 1f else 0.55f)
+            .selectable(selected = selected, enabled = enabled, role = Role.RadioButton, interactionSource = press, indication = LocalIndication.current, onClick = onClick)
+            .semantics { contentDescription = type.title + if (taken) ", already added" else if (type.available) ", " + type.tagline else ", coming soon" },
     ) {
         if (type == PageletType.SKY) SkyPreview() else if (type == PageletType.HEADLINES) HeadlinesPreview()
         else if (type == PageletType.AGENDA) AgendaPreview() else if (type == PageletType.NOW_PLAYING) NowPlayingPreview() else if (type == PageletType.MOVE) MovePreview() else Box(Modifier.matchParentSizeCompat().background(scheme.surfaceContainerHigh))
+        // A soft scrim under the name, so it reads over any preview.
+        Box(
+            Modifier.align(Alignment.BottomStart).fillMaxWidth().height(96.dp).background(
+                Brush.verticalGradient(
+                    listOf(Color.Transparent, if (type == PageletType.SKY) Color.Black.copy(alpha = 0.35f) else scheme.surface.copy(alpha = 0.9f)),
+                ),
+            ),
+        )
         Column(Modifier.align(Alignment.BottomStart).padding(14.dp)) {
-            Text(type.title, color = if (type == PageletType.SKY) Color.White else scheme.onSurface, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(type.title, color = onPreview, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 if (taken) "Already added" else if (type.available) type.tagline else "Coming soon",
-                color = (if (type == PageletType.SKY) Color.White else scheme.onSurface).copy(alpha = 0.7f), fontSize = 11.sp,
+                color = onPreview.copy(alpha = NivoAlpha.medium), style = MaterialTheme.typography.labelSmall,
+                maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = NivoSpace.xxs),
             )
         }
         if (selected) {
@@ -217,8 +261,8 @@ private fun SkyPreview() {
 @Composable
 private fun SkyOptions(config: PageletConfig, onChange: (PageletConfig) -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    Text("Show on this Pagelet", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-    FlowRow(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    SectionLabel("Show on this Pagelet")
+    FlowRow(Modifier.padding(horizontal = NivoSpace.xl), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
         SkySection.entries.forEach { section ->
             FilterChip(
                 selected = config.has(section),
@@ -257,18 +301,21 @@ private fun SkyOptions(config: PageletConfig, onChange: (PageletConfig) -> Unit)
 /** "Use the whole page": hide the dock and search bar while this Pagelet is showing. */
 @Composable
 private fun WholePageRow(config: PageletConfig, onChange: (PageletConfig) -> Unit) {
+    // The whole row toggles, so the label is part of the target and is read with the switch.
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth()
+            .toggleable(value = config.hideDock, role = Role.Switch, onValueChange = { onChange(config.copy(hideDock = it)) })
+            .padding(horizontal = NivoSpace.xl, vertical = NivoSpace.m),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(end = NivoSpace.l)) {
             Text("Use the whole page", style = MaterialTheme.typography.titleSmall)
             Text(
                 "Hide the dock and search bar on this page",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Switch(checked = config.hideDock, onCheckedChange = { onChange(config.copy(hideDock = it)) })
+        Switch(checked = config.hideDock, onCheckedChange = null)
     }
 }
 
@@ -299,12 +346,21 @@ private fun HeadlinesPreview() {
     }
 }
 
+/** A small heading over a group of options, with room above it to separate it from what came before. */
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(start = NivoSpace.xl, end = NivoSpace.xl, top = NivoSpace.s, bottom = NivoSpace.xs).semantics { heading() },
+    )
+}
+
 /** The same title block on every Pagelet sheet. */
 @Composable
 private fun SheetTitle(text: String) {
     Text(
         text, style = MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
+        modifier = Modifier.padding(start = NivoSpace.xl, end = NivoSpace.xl, top = NivoSpace.s, bottom = NivoSpace.xs).semantics { heading() },
     )
 }
 
@@ -315,8 +371,8 @@ private fun SimplePageletOptions(type: PageletType, config: PageletConfig, onCha
     when (type) {
         PageletType.AGENDA -> SwitchRow("Show finished events", "Keep today's events that are over in the list, dimmed", config.showPast) { onChange(config.copy(showPast = it)) }
         PageletType.MOVE -> {
-            Text("Show on this Pagelet", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-            FlowRow(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionLabel("Show on this Pagelet")
+            FlowRow(Modifier.padding(horizontal = NivoSpace.xl), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                 com.snapkode.nivolauncher.pagelet.MoveSection.entries.forEach { section ->
                     FilterChip(
                         selected = config.has(section),
@@ -343,12 +399,16 @@ private fun SimplePageletOptions(type: PageletType, config: PageletConfig, onCha
 
 @Composable
 private fun SwitchRow(title: String, line: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(end = 16.dp)) {
+    Row(
+        Modifier.fillMaxWidth().toggleable(value = checked, role = Role.Switch, onValueChange = onChecked)
+            .padding(horizontal = NivoSpace.xl, vertical = NivoSpace.m),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = NivoSpace.l)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChecked)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

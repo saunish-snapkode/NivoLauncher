@@ -23,6 +23,18 @@ import kotlin.math.PI
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -104,25 +116,29 @@ internal fun MoveBody(config: PageletConfig, result: MoveResult?, onOptions: () 
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 8.dp, top = 16.dp), verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().padding(start = NivoSpace.xl, end = NivoSpace.s, top = NivoSpace.l), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
                 Text("MOVE · " + java.text.SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(java.util.Date()).uppercase(),
-                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold), color = readableOn(StepsGreen, scheme.surface))
-                Text("Your day in motion", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light), color = scheme.onSurface)
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.6.sp, fontWeight = FontWeight.SemiBold), color = readableOn(StepsGreen, scheme.surface),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "Your day in motion", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Light), color = scheme.onSurface,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
+                )
             }
             IconButton(onClick = onOptions) { Icon(Icons.Outlined.Tune, "Customise Move", tint = scheme.onSurfaceVariant) }
         }
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 12.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = NivoSpace.l).padding(top = NivoSpace.m, bottom = NivoSpace.xxl), verticalArrangement = Arrangement.spacedBy(NivoSpace.m)) {
             when (val r = result) {
-                null -> Unit
-                MoveResult.NotInstalled -> AskCard("Get Health Connect", "Steps, sleep and heart rate come from Health Connect, which isn't installed on this phone.", "Get Health Connect") { openHealthConnectStore(context) }
+                null -> MoveLoading()
+                MoveResult.NotInstalled -> AskCard("Get Health Connect", "Steps, sleep and heart rate come from Health Connect, which isn't installed on this phone.", "Get Health Connect", icon = Icons.Outlined.FileDownload) { openHealthConnectStore(context) }
                 MoveResult.Unsupported -> EmptyState(Icons.Filled.DirectionsWalk, "Not available here", "This phone can't run Health Connect.")
-                is MoveResult.Failed -> AskCard("Couldn't read your health data", "Health Connect didn't answer. Try again in a moment.", "Try again") { onRetry() }
+                is MoveResult.Failed -> AskCard("Couldn't read your health data", "Health Connect didn't answer. Try again in a moment.", "Try again", icon = Icons.Outlined.Refresh) { onRetry() }
                 is MoveResult.Ready -> {
                     val d = r.data
                     val wantsSteps = config.has(MoveSection.STEPS); val wantsSleep = config.has(MoveSection.SLEEP); val wantsHeart = config.has(MoveSection.HEART)
                     val missing = listOfNotNull("steps".takeIf { wantsSteps && !d.canReadSteps }, "sleep".takeIf { wantsSleep && !d.canReadSleep }, "heart rate".takeIf { wantsHeart && !d.canReadHeart })
-                    if (missing.isNotEmpty()) AskCard("Connect Health Connect", "To show your " + missing.joinToString(", ") + ". Read-only; it stays on this phone.", "Connect") { onAsk() }
+                    if (missing.isNotEmpty()) AskCard("Connect Health Connect", "To show your " + missing.joinToString(", ") + ". Read-only; it stays on this phone.", "Connect", icon = Icons.Outlined.FavoriteBorder) { onAsk() }
                     if ((wantsSteps && d.canReadSteps) || (wantsSleep && d.canReadSleep)) RingsHero(d, config, wantsSteps && d.canReadSteps, wantsSleep && d.canReadSleep)
                     if (wantsSteps && d.canReadSteps && d.week != null) WeekCard(d.week, config.stepGoal.toLong())
                     if (wantsSleep && d.canReadSleep) SleepCard(d.sleepMin, config.sleepGoalMin)
@@ -139,6 +155,28 @@ private val SleepIndigo = Color(0xFF7C6CF6)
 private val HeartRed = Color(0xFFFF4D5E)
 
 private fun readableOn(c: Color, bg: Color): Color = if (bg.luminance() > 0.5f) lerp(c, Color.Black, 0.35f) else lerp(c, Color.White, 0.15f)
+
+/** Tabular figures: numbers that update in place keep their width instead of jiggling. */
+private const val TNUM = "tnum"
+
+/** While Health Connect answers: the cards' outlines, breathing softly (still under reduced motion). */
+@Composable
+private fun MoveLoading() {
+    val scheme = MaterialTheme.colorScheme
+    val reduced = LocalMotion.current.reduced
+    // Read in the layer, not in composition, so the breathing never recomposes the cards.
+    val pulse = rememberInfiniteTransition(label = "moveLoading").animateFloat(
+        0.55f, 1f, infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "moveLoadingA",
+    )
+    Column(
+        Modifier.fillMaxWidth().semantics { contentDescription = "Reading your health data" },
+        verticalArrangement = Arrangement.spacedBy(NivoSpace.m),
+    ) {
+        listOf(196.dp, 210.dp, 120.dp).forEach { h ->
+            Box(Modifier.fillMaxWidth().height(h).graphicsLayer { alpha = if (reduced) 0.8f else pulse.value }.background(scheme.surfaceContainerLow, RoundedCornerShape(NivoRadius.hero)))
+        }
+    }
+}
 
 /** Rings grow to their value the first time the page is seen. */
 @Composable
@@ -157,9 +195,16 @@ private fun RingsHero(d: MoveData, config: PageletConfig, showSteps: Boolean, sh
     val steps = d.steps ?: 0L
     val stepP = MoveFormat.progress(steps, config.stepGoal.toLong())
     val sleepP = d.sleepMin?.let { MoveFormat.progress(it.toLong(), config.sleepGoalMin.toLong()) } ?: 0f
-    Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(32.dp)).padding(20.dp)) {
+    Column(
+        Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(32.dp))
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(32.dp)).padding(20.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(148.dp), contentAlignment = Alignment.Center) {
+            val ringsLabel = listOfNotNull(
+                if (showSteps) "Steps, ${(stepP * 100).roundToInt()} percent of goal" else null,
+                if (showSleep) "Sleep, ${(sleepP * 100).roundToInt()} percent of goal" else null,
+            ).joinToString(". ")
+            Box(Modifier.size(148.dp).clearAndSetSemantics { contentDescription = ringsLabel }, contentAlignment = Alignment.Center) {
                 Canvas(Modifier.fillMaxSize()) {
                     val sw = 16.dp.toPx(); val gap = 4.dp.toPx()
                     fun ring(i: Int, color: Color, p: Float) {
@@ -177,7 +222,7 @@ private fun RingsHero(d: MoveData, config: PageletConfig, showSteps: Boolean, sh
                 }
                 if (showSteps) Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.DirectionsWalk, null, tint = StepsGreen, modifier = Modifier.size(18.dp))
-                    Text("${(stepP * 100 * grow).roundToInt()}%", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface)
+                    Text("${(stepP * 100 * grow).roundToInt()}%", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TNUM), color = scheme.onSurface)
                 }
             }
             Column(Modifier.padding(start = 20.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -199,20 +244,20 @@ private fun RingsHero(d: MoveData, config: PageletConfig, showSteps: Boolean, sh
 @Composable
 private fun Legend(color: Color, value: String, label: String) {
     val scheme = MaterialTheme.colorScheme
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) {}) {
         Box(Modifier.size(width = 4.dp, height = 36.dp).background(color, RoundedCornerShape(2.dp)))
-        Column(Modifier.padding(start = 12.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface)
-            Text(label, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        Column(Modifier.padding(start = NivoSpace.m)) {
+            Text(value, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TNUM), color = scheme.onSurface, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
 
 @Composable
 private fun MiniStat(value: String, label: String) {
-    Column {
-        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(Modifier.semantics(mergeDescendants = true) {}) {
+        Text(value, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TNUM), color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
     }
 }
 
@@ -225,13 +270,17 @@ private fun WeekCard(week: List<Long>, goal: Long) {
     val top = maxOf(week.maxOrNull() ?: 0L, goal, 1L).toFloat()
     val avg = MoveFormat.average(week)
     val weekday = remember { java.text.SimpleDateFormat("EEEEE", Locale.getDefault()) }
-    Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(28.dp)).padding(20.dp)) {
+    Column(
+        Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(NivoRadius.hero))
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(NivoRadius.hero)).padding(20.dp),
+    ) {
         Row(verticalAlignment = Alignment.Bottom) {
             Text("This week", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold), color = scheme.onSurface, modifier = Modifier.weight(1f))
-            if (avg != null) Text("avg %,d a day".format(avg), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+            if (avg != null) Text("avg %,d a day".format(avg), style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = TNUM), color = scheme.onSurfaceVariant, maxLines = 1)
         }
         val track = StepsGreen.copy(alpha = 0.22f); val goalC = scheme.onSurfaceVariant.copy(alpha = 0.5f)
-        Box(Modifier.padding(top = 18.dp).fillMaxWidth().height(120.dp)) {
+        val weekLabel = "Steps over the last ${week.size} days: " + week.joinToString(", ") { "%,d".format(it) } + ". Today " + "%,d".format(week.lastOrNull() ?: 0L)
+        Box(Modifier.padding(top = 18.dp).fillMaxWidth().height(120.dp).clearAndSetSemantics { contentDescription = weekLabel }) {
             Canvas(Modifier.fillMaxSize()) {
                 val n = bars.size; val gap = 10.dp.toPx()
                 val bw = (size.width - gap * (n - 1)) / n
@@ -288,7 +337,7 @@ private fun SleepCard(sleepMin: Int?, goalMin: Int) {
                 Text("No sleep recorded", Modifier.padding(top = 10.dp), style = MaterialTheme.typography.headlineSmall, color = Color.White)
                 Text("Wear your watch to bed, or log sleep in a sleep app that writes to Health Connect.", Modifier.padding(top = 4.dp).fillMaxWidth(0.75f), style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.7f))
             } else {
-                Text(MoveFormat.duration(sleepMin), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Light), color = Color.White)
+                Text(MoveFormat.duration(sleepMin), Modifier.padding(top = NivoSpace.s), style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Light, fontFeatureSettings = TNUM), color = Color.White)
                 val p = MoveFormat.progress(sleepMin.toLong(), goalMin.toLong())
                 Box(Modifier.padding(top = 12.dp).fillMaxWidth(0.7f).height(6.dp).background(Color.White.copy(alpha = 0.16f), CircleShape)) {
                     Box(Modifier.fillMaxWidth(p * grow).height(6.dp).background(Brush.horizontalGradient(listOf(Color(0xFF9D8CFF), Color(0xFFC9C2FF))), CircleShape))
@@ -304,7 +353,10 @@ private fun SleepCard(sleepMin: Int?, goalMin: Int) {
 private fun HeartCard(h: HeartStats?) {
     val scheme = MaterialTheme.colorScheme
     val reduced = LocalMotion.current.reduced
-    Column(Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(28.dp)).padding(20.dp)) {
+    Column(
+        Modifier.fillMaxWidth().background(scheme.surfaceContainerLow, RoundedCornerShape(NivoRadius.hero))
+            .border(1.dp, scheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(NivoRadius.hero)).padding(20.dp),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Favorite, null, tint = HeartRed, modifier = Modifier.size(16.dp))
             Text("HEART RATE", Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 1.4.sp, fontWeight = FontWeight.Bold), color = readableOn(HeartRed, scheme.surface))
@@ -317,7 +369,7 @@ private fun HeartCard(h: HeartStats?) {
         val beatMs = 60_000 / bpm
         val t by rememberInfiniteTransition(label = "ecg").animateFloat(0f, 1f, infiniteRepeatable(tween(beatMs * 3, easing = LinearEasing)), label = "ecgT")
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.Bottom) {
-            Text((h.latest ?: h.average).toString(), style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Light), color = scheme.onSurface)
+            Text((h.latest ?: h.average)?.toString() ?: "–", style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Light, fontFeatureSettings = TNUM), color = scheme.onSurface)
             Text(" bpm", Modifier.padding(bottom = 10.dp), style = MaterialTheme.typography.titleMedium, color = scheme.onSurfaceVariant)
             Spacer(Modifier.width(16.dp))
             // The trace: three heartbeats across, scrolling.
@@ -368,8 +420,11 @@ private fun HeartCard(h: HeartStats?) {
 
 @Composable
 private fun HeartStat(label: String, value: Int?, centered: Boolean = false, end: Boolean = false) {
-    Column(horizontalAlignment = if (end) Alignment.End else if (centered) Alignment.CenterHorizontally else Alignment.Start) {
-        Text(value?.toString() ?: "–", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
+    Column(
+        Modifier.semantics(mergeDescendants = true) {},
+        horizontalAlignment = if (end) Alignment.End else if (centered) Alignment.CenterHorizontally else Alignment.Start,
+    ) {
+        Text(value?.toString() ?: "–", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = TNUM), color = MaterialTheme.colorScheme.onSurface)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

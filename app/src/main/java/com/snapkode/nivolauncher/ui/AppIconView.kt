@@ -18,6 +18,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,22 +40,45 @@ val LocalBadgeStyle = androidx.compose.runtime.compositionLocalOf { BadgeStyle()
 fun BadgeStyle.countFor(app: AppInfo): Int =
     if (!enabled) 0 else counts[com.snapkode.nivolauncher.NotificationState.badgeKey(app.packageName, app.user.hashCode())] ?: 0
 
+/** ", 3 notifications" for a spoken description, or "" when there are none. */
+internal fun notificationPhrase(count: Int): String = when {
+    count <= 0 -> ""
+    count == 1 -> ", 1 notification"
+    else -> ", $count notifications"
+}
+
 /** Dot or number pill in the corner of an icon. */
 @Composable
 fun NotificationBadge(count: Int, modifier: Modifier = Modifier) {
     val style = LocalBadgeStyle.current
     if (count <= 0) return
+    // The badge sits on top of arbitrary icon art: its text picks black or white for the chosen colour. It is hidden
+    // from screen readers because the icon's own description already carries the count (see [notificationPhrase]).
+    val onBadge = if (style.color.luminance() > 0.55f) Color(0xFF1B1B1F) else Color.White
     if (style.showCount) {
         androidx.compose.foundation.layout.Box(
             modifier
                 .defaultMinSize(minWidth = 16.dp, minHeight = 16.dp)
                 .background(style.color, androidx.compose.foundation.shape.CircleShape)
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = 4.dp)
+                .clearAndSetSemantics { },
             contentAlignment = Alignment.Center,
-        ) { Text(if (count > 99) "99+" else "$count", color = Color.White, fontSize = 10.sp) }
+        ) {
+            Text(
+                if (count > 99) "99+" else "$count",
+                color = onBadge,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+        }
     } else {
         androidx.compose.foundation.layout.Box(
-            modifier.size(12.dp).background(style.color, androidx.compose.foundation.shape.CircleShape)
+            modifier
+                .size(12.dp)
+                .background(style.color, androidx.compose.foundation.shape.CircleShape)
+                .clearAndSetSemantics { }
         )
     }
 }
@@ -65,7 +91,8 @@ val LocalHomeLocked = androidx.compose.runtime.compositionLocalOf { false }
 
 val LocalLabelLines = androidx.compose.runtime.compositionLocalOf { 1 }
 
-private val LabelShadow = Shadow(Color(0x99000000), Offset(0f, 2f), 6f)
+/** Soft drop shadow that keeps white labels legible over any wallpaper; shared by app and folder labels. */
+internal val HomeLabelShadow = Shadow(Color(0x99000000), Offset(0f, 2f), 6f)
 
 /** Icon with optional label. [onWallpaper] picks white-with-shadow text for use over the wallpaper. */
 @Composable
@@ -96,14 +123,17 @@ fun AppIconView(
             val bigFont = fontScale > 1.3f
             // Icon labels sit in a narrow cell: grow with the system font, but never past ~150%.
             val labelCap = if (fontScale > 1.5f) 1.5f / fontScale else 1f
+            val labelSize = LocalLabelSize.current * labelCap
             Text(
                 text = app.label,
                 maxLines = if (bigFont) maxOf(2, LocalLabelLines.current) else LocalLabelLines.current,
                 overflow = TextOverflow.Ellipsis,
-                fontSize = (LocalLabelSize.current * labelCap).sp,
+                fontSize = labelSize.sp,
+                // A tight line height keeps two-line labels together as one block under the icon.
+                lineHeight = (labelSize * 1.2f).sp,
                 color = if (onWallpaper) LocalHomeTextColor.current else androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
                 style = androidx.compose.ui.text.TextStyle(
-                    shadow = if (onWallpaper && LocalHomeTextColor.current == Color.White) LabelShadow else null,
+                    shadow = if (onWallpaper && LocalHomeTextColor.current == Color.White) HomeLabelShadow else null,
                     fontFamily = LocalAppFont.current,
                 ),
                 modifier = Modifier.width(((if (bigFont) 80 else 64) * scale).dp.coerceAtLeast(56.dp)),

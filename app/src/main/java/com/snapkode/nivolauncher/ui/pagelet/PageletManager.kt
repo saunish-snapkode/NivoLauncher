@@ -1,6 +1,28 @@
 package com.snapkode.nivolauncher.ui.pagelet
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Widgets
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
+import com.snapkode.nivolauncher.ui.design.NivoAlpha
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,49 +72,79 @@ fun PageletManagerSheet(
         Column(Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
                 "Pagelets", style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 4.dp).semantics { heading() },
+                modifier = Modifier.padding(start = NivoSpace.xl, end = NivoSpace.xl, top = NivoSpace.s, bottom = NivoSpace.xs).semantics { heading() },
             )
             Text(
                 if (locked) "Unlock the home layout to add or remove Pagelets."
                 else "Each Pagelet fills a home page of its own and can be on home once.",
                 style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 12.dp),
+                modifier = Modifier.padding(start = NivoSpace.xl, end = NivoSpace.xl, bottom = NivoSpace.m),
             )
             PageletType.entries.filter { it != PageletType.FOCUS }.forEach { type ->
                 val here = placed.firstOrNull { it.type == type }
                 Surface(
-                    Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(20.dp), color = scheme.surfaceContainer, border = BorderStroke(1.dp, scheme.outlineVariant),
+                    Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.xs),
+                    shape = RoundedCornerShape(NivoRadius.card), color = scheme.surfaceContainer, border = BorderStroke(1.dp, scheme.outlineVariant),
                 ) {
-                    Column(Modifier.padding(16.dp)) {
+                    Column(Modifier.padding(NivoSpace.l).alpha(if (type.available) 1f else NivoAlpha.medium)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text(type.title, style = MaterialTheme.typography.titleMedium)
+                            Box(
+                                Modifier.size(40.dp).background(if (here != null) scheme.primaryContainer else scheme.surfaceContainerHighest, RoundedCornerShape(NivoRadius.control)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    pageletIcon(type), null, Modifier.size(20.dp),
+                                    tint = if (here != null) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                                )
+                            }
+                            Column(Modifier.weight(1f).padding(start = NivoSpace.m, end = NivoSpace.m).semantics(mergeDescendants = true) {}) {
+                                Text(type.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     when {
                                         here != null -> "On page ${here.page + 1}"
                                         type.available -> type.tagline
                                         else -> "Coming soon"
                                     },
-                                    style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (here != null) scheme.primary else scheme.onSurfaceVariant,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 )
                             }
                             if (here == null && type.available) {
-                                Button(onClick = { onAdd(type) }, enabled = !locked) { Text("Add") }
+                                Button(onClick = { onAdd(type) }, enabled = !locked, modifier = Modifier.heightIn(min = NivoTouch.min)) {
+                                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(NivoSpace.xs))
+                                    Text("Add", maxLines = 1)
+                                }
                             }
                         }
-                        if (here != null) Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { onCustomise(here.id) }, modifier = Modifier.weight(1f)) { Text("Customise", maxLines = 1) }
-                            OutlinedButton(onClick = { onRemove(here.id) }, enabled = !locked, modifier = Modifier.weight(1f)) {
-                                Text("Remove", maxLines = 1, color = if (locked) scheme.onSurface.copy(alpha = 0.38f) else scheme.error)
+                        if (here != null) Row(Modifier.fillMaxWidth().padding(top = NivoSpace.m), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
+                            OutlinedButton(onClick = { onCustomise(here.id) }, modifier = Modifier.weight(1f).heightIn(min = NivoTouch.min)) {
+                                Text("Customise", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            OutlinedButton(
+                                onClick = { onRemove(here.id) }, enabled = !locked, modifier = Modifier.weight(1f).heightIn(min = NivoTouch.min),
+                                border = BorderStroke(1.dp, if (locked) scheme.onSurface.copy(alpha = NivoAlpha.hairline) else scheme.error.copy(alpha = 0.5f)),
+                            ) {
+                                Text("Remove", maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (locked) scheme.onSurface.copy(alpha = NivoAlpha.disabled) else scheme.error)
                             }
                         }
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss) { Text("Done") }
+            Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xl, vertical = NivoSpace.s), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = NivoTouch.min)) { Text("Done") }
             }
         }
     }
+}
+
+/** The glyph each kind of Pagelet goes by in lists. */
+internal fun pageletIcon(type: PageletType): ImageVector = when (type) {
+    PageletType.SKY -> Icons.Outlined.WbSunny
+    PageletType.AGENDA -> Icons.Outlined.CalendarMonth
+    PageletType.NOW_PLAYING -> Icons.Outlined.MusicNote
+    PageletType.HEADLINES -> Icons.AutoMirrored.Outlined.Article
+    PageletType.MOVE -> Icons.Outlined.FavoriteBorder
+    else -> Icons.Outlined.Widgets
 }

@@ -52,6 +52,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -90,9 +95,12 @@ fun PageletPage(viewModel: LauncherViewModel, id: String, type: PageletType, onO
 @Composable
 internal fun PageletHeader(title: String, subtitle: String?, onOptions: () -> Unit, actions: @Composable RowScope.() -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
-    Row(Modifier.padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.padding(start = 20.dp, end = NivoSpace.xs, top = NivoSpace.m, bottom = NivoSpace.s), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface)
+            Text(
+                title, style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() },
+            )
             if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         actions()
@@ -100,16 +108,28 @@ internal fun PageletHeader(title: String, subtitle: String?, onOptions: () -> Un
     }
 }
 
-/** A calm card asking for one permission, with its button. */
+/** A calm card asking for one permission, with its button. [icon], when given, sits in a tonal badge above the title. */
 @Composable
-internal fun AskCard(title: String, why: String, action: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun AskCard(
+    title: String, why: String, action: String, modifier: Modifier = Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null, onClick: () -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(NivoRadius.hero)
     Column(
-        modifier.fillMaxWidth().background(scheme.surfaceContainer, RoundedCornerShape(24.dp)).padding(20.dp),
+        modifier.fillMaxWidth()
+            .background(scheme.surfaceContainer, shape)
+            .border(1.dp, scheme.outlineVariant, shape)
+            .padding(20.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.titleMedium, color = scheme.onSurface)
-        Text(why, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        Button(onClick = onClick, modifier = Modifier.padding(top = 14.dp)) { Text(action) }
+        if (icon != null) {
+            Box(Modifier.padding(bottom = NivoSpace.m).size(44.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(22.dp), tint = scheme.onPrimaryContainer)
+            }
+        }
+        Text(title, style = MaterialTheme.typography.titleMedium, color = scheme.onSurface, modifier = Modifier.semantics { heading() })
+        Text(why, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(top = NivoSpace.xs))
+        Button(onClick = onClick, modifier = Modifier.padding(top = NivoSpace.l).heightIn(min = NivoTouch.min)) { Text(action, maxLines = 1, overflow = TextOverflow.Ellipsis) }
     }
 }
 
@@ -117,12 +137,14 @@ internal fun AskCard(title: String, why: String, action: String, modifier: Modif
 @Composable
 internal fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, line: String, modifier: Modifier = Modifier) {
     val scheme = MaterialTheme.colorScheme
-    Column(modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.fillMaxWidth().padding(NivoSpace.xxl), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(72.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = scheme.primary, modifier = Modifier.size(34.dp))
+            Icon(icon, null, tint = scheme.onPrimaryContainer, modifier = Modifier.size(34.dp))
         }
-        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 16.dp))
-        Text(line, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
+        Text(
+            title, style = MaterialTheme.typography.titleMedium, color = scheme.onSurface, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = NivoSpace.l).semantics { heading() },
+        )
+        Text(line, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.xs))
     }
 }
-

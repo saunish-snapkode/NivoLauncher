@@ -37,7 +37,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.snapkode.nivolauncher.ui.design.NivoRadius
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.NivoTouch
 
 /** The launcher's long-press menu: one rounded tonal card with icon-led rows, used for every icon. */
 @Composable
@@ -52,7 +57,8 @@ fun NivoMenu(expanded: Boolean, onDismiss: () -> Unit, content: @Composable Colu
         expanded = expanded,
         onDismissRequest = onDismiss,
         modifier = Modifier.widthIn(min = 220.dp),
-        shape = RoundedCornerShape(18.dp),
+        // Same radius as the spotlight card, so every menu in the launcher reads as one family.
+        shape = RoundedCornerShape(NivoRadius.card),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
         shadowElevation = 12.dp,
@@ -70,18 +76,20 @@ fun NivoMenuItem(label: String, icon: ImageVector, onClick: () -> Unit, destruct
     // 16dp of padding all round, so the card hugs it evenly.
     androidx.compose.foundation.layout.Row(
         Modifier
-            .padding(horizontal = 6.dp)
+            .padding(horizontal = MenuInset)
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 48.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .defaultMinSize(minHeight = NivoTouch.min)
+            // Inner radius = card radius minus the inset, so the press highlight sits concentric with the card.
+            .clip(RoundedCornerShape(NivoRadius.control))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.l, vertical = 10.dp),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
     ) {
         Icon(icon, null, tint = iconTint)
         Text(
-            label, style = MaterialTheme.typography.bodyLarge, color = text, maxLines = 1,
-            modifier = Modifier.padding(start = 16.dp),
+            label, style = MaterialTheme.typography.bodyLarge, color = text,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = NivoSpace.l),
         )
     }
 }
@@ -119,13 +127,18 @@ fun NivoQuickAction(label: String, icon: ImageVector, onClick: () -> Unit, modif
     val tint = if (destructive) scheme.error else scheme.onSurface
     androidx.compose.foundation.layout.Column(
         modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 10.dp),
+            .defaultMinSize(minHeight = NivoTouch.min)
+            .clip(RoundedCornerShape(NivoRadius.control))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.s, vertical = 10.dp),
         horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        Icon(icon, null, tint = tint, modifier = Modifier.padding(bottom = 4.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = tint)
+        Icon(icon, null, tint = tint, modifier = Modifier.padding(bottom = NivoSpace.xs))
+        Text(
+            label, style = MaterialTheme.typography.labelMedium, color = tint,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -133,8 +146,36 @@ fun NivoQuickAction(label: String, icon: ImageVector, onClick: () -> Unit, modif
 @Composable
 fun NivoQuickRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     androidx.compose.foundation.layout.Row(
-        Modifier.padding(horizontal = 6.dp).fillMaxWidth(),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp),
+        Modifier.padding(horizontal = MenuInset).fillMaxWidth(),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(NivoSpace.xs),
         content = content,
     )
+}
+
+/** Horizontal inset of menu rows inside the card: card radius minus row radius, so corners stay concentric. */
+private val MenuInset = NivoRadius.card - NivoRadius.control
+
+/**
+ * A full-width, 48dp-tall choice in a dialog list ("Move to…", "Add to folder"): a leading glyph, an ellipsised label and a
+ * rounded press highlight, so pickers across the drawer, library and selection bar look and behave the same.
+ */
+@Composable
+internal fun NivoChoiceRow(label: String, icon: ImageVector, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    androidx.compose.foundation.layout.Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = NivoTouch.min)
+            .clip(RoundedCornerShape(NivoRadius.control))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = NivoSpace.s, vertical = NivoSpace.s),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = scheme.onSurfaceVariant)
+        Text(
+            label, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface,
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = NivoSpace.l),
+        )
+    }
 }

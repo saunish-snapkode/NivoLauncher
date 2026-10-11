@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalView
 import com.snapkode.nivolauncher.ui.design.LocalHapticsEnabled
 import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -339,7 +340,7 @@ fun HomeScreen(
         if (hoverId != null) {
             delay(140)
             drag.mergeTarget = hoverId
-            hoverHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            if (latestHapticsOn) hoverHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         }
     }
 
@@ -736,7 +737,7 @@ fun HomeScreen(
             Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(bottom = with(density) { dockHeightPx.toDp() } + 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(NivoSpace.s),
         ) {
             PageletUndoPill(
                 visible = pageletUndo != null,
@@ -765,14 +766,15 @@ fun HomeScreen(
     val sheetShown = editMode && !showOverview
     // The page under the sheet: a Pagelet page has no icons to select.
     val onPageletPage = workspacePageAt(pagerState.currentPage)?.let { p -> workspace.any { it.page == p && isPageletId(it.id) } } == true
+    val sheetMotion = LocalMotion.current
     androidx.compose.animation.AnimatedVisibility(
         visible = sheetShown,
-        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(180)),
-        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(160)),
+        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(sheetMotion.duration(180))),
+        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(sheetMotion.duration(160))),
     ) {
         Box(
             Modifier.fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.32f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f))
                 .semantics { contentDescription = "Close editing"; role = androidx.compose.ui.semantics.Role.Button }
                 .clickable(interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }, indication = null) { editMode = false }
         )
@@ -780,8 +782,13 @@ fun HomeScreen(
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         androidx.compose.animation.AnimatedVisibility(
             visible = sheetShown,
-            enter = androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it },
-            exit = androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(200)) { it },
+            // Reduced motion: the sheet simply fades in place instead of travelling up from the bottom edge.
+            enter = if (sheetMotion.reduced) androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(sheetMotion.duration(260)))
+            else androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(260, easing = androidx.compose.animation.core.FastOutSlowInEasing)) { it } +
+                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(160)),
+            exit = if (sheetMotion.reduced) androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(sheetMotion.duration(200)))
+            else androidx.compose.animation.slideOutVertically(androidx.compose.animation.core.tween(200, easing = androidx.compose.animation.core.FastOutLinearInEasing)) { it } +
+                androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200)),
         ) {
             EditSheet(
                 onWallpaper = { editMode = false; viewModel.pickWallpaper() },
@@ -949,7 +956,7 @@ private fun DockBar(
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp + settings.dockBottomSpace.dp)
+            .padding(start = NivoSpace.m, end = NivoSpace.m, top = NivoSpace.s, bottom = NivoSpace.s + settings.dockBottomSpace.dp)
     ) {
         val shape = RoundedCornerShape(settings.dockRadius.dp)
         val dockModifier = when (settings.dockStyle) {
@@ -965,7 +972,7 @@ private fun DockBar(
                 modifier = Modifier.fillMaxWidth(),
                 beyondViewportPageCount = settings.dockPages,
             ) { page ->
-                Row(Modifier.padding(vertical = 8.dp)) {
+                Row(Modifier.padding(vertical = NivoSpace.s)) {
                     for (index in 0 until slots) {
                         val slot = page * slots + index
                         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
@@ -977,7 +984,7 @@ private fun DockBar(
                                 )
                             } else {
                                 // An empty dock slot shows a faint dot, so a half-full dock still reads as balanced.
-                                Box(Modifier.size((56 * settings.iconScale).dp), contentAlignment = Alignment.Center) {
+                                Box(Modifier.size((56 * settings.iconScale).dp).clearAndSetSemantics { }, contentAlignment = Alignment.Center) {
                                     Box(Modifier.size(6.dp).background(LocalHomeTextColor.current.copy(alpha = 0.28f), CircleShape))
                                 }
                             }
@@ -1004,7 +1011,7 @@ private fun HomeEntry(
     modifier: Modifier,
 ) {
     val locked = LocalHomeLocked.current
-    val selection = LocalSelection.current
+    val badgeStyle = LocalBadgeStyle.current
     val folder = folders[id]
     val app = appsById[id]
     // The open folder's tile hides while its card is up, but comes back once an icon is dragged out of the card,
@@ -1025,7 +1032,9 @@ private fun HomeEntry(
         .springVisible(!((drag.lifted && drag.id == id) || (drag.openFolderId == id && !draggedOutOfThis)))
     when {
         folder != null -> DragCell(
-            id, drag, modifier, description = "Folder ${folder.name}, ${folder.appIds.size} apps",
+            id, drag, modifier,
+            description = "Folder ${folder.name}, ${folder.appIds.size} ${if (folder.appIds.size == 1) "app" else "apps"}" +
+                notificationPhrase(folder.appIds.sumOf { appId -> appsById[appId]?.let(badgeStyle::countFor) ?: 0 }),
             onTap = { r -> onOpenFolder(folder.id, Rect(r.left.toFloat(), r.top.toFloat(), r.right.toFloat(), r.bottom.toFloat())) },
             menu = { expanded, dismiss ->
                 NivoMenu(expanded = expanded, onDismiss = dismiss) {
@@ -1044,7 +1053,7 @@ private fun HomeEntry(
         }
 
         app != null -> DragCell(
-            id, drag, modifier, description = app.label,
+            id, drag, modifier, description = app.label + notificationPhrase(badgeStyle.countFor(app)),
             onTap = { bounds -> viewModel.launch(app, bounds) },
             menu = { expanded, dismiss ->
                 AppMenu(
@@ -1198,7 +1207,7 @@ private fun PageDots(count: Int, current: () -> Int, surfaceFraction: () -> Floa
                 val f = surfaceFraction()
                 if (f > 0f) drawRect(surface.copy(alpha = f))
             }
-            .padding(top = 14.dp, bottom = 8.dp).semantics(mergeDescendants = true) {
+            .padding(top = 14.dp, bottom = NivoSpace.s).semantics(mergeDescendants = true) {
             contentDescription = "Page ${current() + 1} of $count"
         },
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
@@ -1207,11 +1216,12 @@ private fun PageDots(count: Int, current: () -> Int, surfaceFraction: () -> Floa
         repeat(count) { index ->
             val selected = index == current()
             val size by animateDpAsState(if (selected) 10.dp else 8.dp, LocalMotion.current.spring(), label = "dotSize")
-            val alpha by animateFloatAsState(if (selected) 1f else 0.4f, label = "dotAlpha")
+            val alpha by animateFloatAsState(if (selected) 1f else 0.4f, LocalMotion.current.spring(), label = "dotAlpha")
             Box(
                 Modifier
                     .padding(horizontal = 5.dp)
                     .size(size)
+                    .clearAndSetSemantics { }
                     .drawBehind { drawCircle(dotColor().copy(alpha = alpha)) }
             )
         }

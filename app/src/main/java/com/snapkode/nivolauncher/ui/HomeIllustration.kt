@@ -30,6 +30,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.snapkode.nivolauncher.data.ClockStyle
@@ -53,6 +56,8 @@ fun HomeIllustration(settings: LauncherSettings, modifier: Modifier = Modifier) 
             .clip(shape)
             .background(Brush.verticalGradient(listOf(scheme.primaryContainer.copy(alpha = 0.55f), scheme.surfaceContainerLow, scheme.tertiaryContainer.copy(alpha = 0.45f))))
             .border(4.dp, scheme.outlineVariant, shape)
+            // A picture, not controls: one description instead of the fake clock's digits being read out.
+            .clearAndSetSemantics { contentDescription = "Preview of your home screen" }
     ) {
         Column(Modifier.fillMaxSize().padding(top = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             // status bar
@@ -104,17 +109,20 @@ fun HomeIllustration(settings: LauncherSettings, modifier: Modifier = Modifier) 
 @Composable
 private fun ClockArt(style: ClockStyle) {
     val scheme = MaterialTheme.colorScheme
+    // The mock phone is a fixed-size drawing, so its text is sized in dp: a large system font must not burst the frame.
+    val density = LocalDensity.current
+    fun px(dp: Float) = with(density) { dp.dp.toSp() }
     when (style) {
         ClockStyle.Off -> Unit
         ClockStyle.Hero -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("10:08", fontSize = 40.sp, fontWeight = FontWeight.Light, color = scheme.onSurface, letterSpacing = (-1).sp)
-            Text("Sat, 11 Oct", fontSize = 11.sp, color = scheme.onSurfaceVariant)
+            Text("10:08", fontSize = px(40f), fontWeight = FontWeight.Light, color = scheme.onSurface, letterSpacing = (-1).sp, maxLines = 1)
+            Text("Sat, 11 Oct", fontSize = px(11f), color = scheme.onSurfaceVariant, maxLines = 1)
         }
-        ClockStyle.Minimal -> Text("10:08", fontSize = 22.sp, fontWeight = FontWeight.Medium, color = scheme.onSurface)
+        ClockStyle.Minimal -> Text("10:08", fontSize = px(22f), fontWeight = FontWeight.Medium, color = scheme.onSurface, maxLines = 1)
         ClockStyle.Compact -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("10:08", fontSize = 20.sp, fontWeight = FontWeight.Medium, color = scheme.onSurface)
+            Text("10:08", fontSize = px(20f), fontWeight = FontWeight.Medium, color = scheme.onSurface, maxLines = 1)
             Box(Modifier.width(1.dp).height(18.dp).background(scheme.outline))
-            Text("Sat\n11 Oct", fontSize = 10.sp, lineHeight = 12.sp, color = scheme.onSurfaceVariant)
+            Text("Sat\n11 Oct", fontSize = px(10f), lineHeight = px(12f), color = scheme.onSurfaceVariant, maxLines = 2)
         }
         ClockStyle.Analog -> {
             val face = scheme.onSurface

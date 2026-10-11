@@ -81,6 +81,21 @@ internal fun LassoPathCanvas(session: LassoSession, origin: () -> Offset) {
 
     val primary = scheme.primary
     val error = scheme.error
+    val surface = scheme.surface
+    // Stroke styles depend only on density: build them once, not on every frame of the stroke.
+    val density = LocalDensity.current
+    val strokes = remember(density) {
+        with(density) {
+            LassoStrokes(
+                glow = Stroke(14.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                halo = Stroke(6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                core = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+                ring = Stroke(1.5.dp.toPx()),
+                dashOn = 8.dp.toPx(), dashOff = 8.dp.toPx(),
+            )
+        }
+    }
+    val dashIntervals = remember(strokes) { floatArrayOf(strokes.dashOn, strokes.dashOff) }
     Canvas(Modifier.fillMaxSize()) {
         session.pathTick                                   // reading it here is what invalidates the draw
         val p = session.path
@@ -90,21 +105,39 @@ internal fun LassoPathCanvas(session: LassoSession, origin: () -> Offset) {
         val o = origin()
         translate(o.x, o.y) {
             buildSmooth(smooth, p)
-            drawPath(smooth, tint.copy(alpha = 0.10f * visible), style = Fill)
-            drawPath(smooth, tint.copy(alpha = 0.16f * visible), style = Stroke(7.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-            drawPath(smooth, tint.copy(alpha = 0.92f * visible), style = Stroke(2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(smooth, tint.copy(alpha = 0.08f * visible), style = Fill)
+            // Three passes, wide to narrow: a soft glow, a halo, then a crisp round-capped core line.
+            drawPath(smooth, tint.copy(alpha = 0.07f * visible), style = strokes.glow)
+            drawPath(smooth, tint.copy(alpha = 0.18f * visible), style = strokes.halo)
+            drawPath(smooth, tint.copy(alpha = 0.95f * visible), style = strokes.core)
             // The logical closing edge from the finger back to where the stroke began.
             val ex = p.xs[p.size - 1]; val ey = p.ys[p.size - 1]
+            val sx = p.xs[0]; val sy = p.ys[0]
             drawLine(
-                tint.copy(alpha = 0.5f * visible), Offset(ex, ey), Offset(p.xs[0], p.ys[0]), strokeWidth = 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 8.dp.toPx()), dash.value),
+                tint.copy(alpha = 0.5f * visible), Offset(ex, ey), Offset(sx, sy), strokeWidth = strokes.ring.width,
+                cap = StrokeCap.Round,
+                pathEffect = PathEffect.dashPathEffect(dashIntervals, dash.value),
             )
-            drawCircle(tint.copy(alpha = 0.20f * visible), radius = 11.dp.toPx(), center = Offset(ex, ey))
-            drawCircle(tint.copy(alpha = visible), radius = 4.dp.toPx(), center = Offset(p.xs[0], p.ys[0]))
+            // Start point: a dot inside a target ring, so it reads as "close the loop here".
+            drawCircle(tint.copy(alpha = 0.55f * visible), radius = 9.dp.toPx(), center = Offset(sx, sy), style = strokes.ring)
+            drawCircle(tint.copy(alpha = visible), radius = 4.dp.toPx(), center = Offset(sx, sy))
+            // Fingertip: a soft halo and a dot ringed in the surface colour, so it stays crisp on any wallpaper.
+            drawCircle(tint.copy(alpha = 0.20f * visible), radius = 12.dp.toPx(), center = Offset(ex, ey))
+            drawCircle(surface.copy(alpha = 0.9f * visible), radius = 6.dp.toPx(), center = Offset(ex, ey))
             drawCircle(tint.copy(alpha = visible), radius = 4.5.dp.toPx(), center = Offset(ex, ey))
         }
     }
 }
+
+/** Pre-built stroke styles for the lasso outline (one set per density). */
+private class LassoStrokes(
+    val glow: Stroke,
+    val halo: Stroke,
+    val core: Stroke,
+    val ring: Stroke,
+    val dashOn: Float,
+    val dashOff: Float,
+)
 
 /** Rebuilds [out] as a curve through the midpoints of the raw stroke. Reuses the same Path object every frame. */
 private fun buildSmooth(out: Path, p: LassoPath) {
@@ -132,6 +165,7 @@ internal fun SelectionRing(session: LassoSession, id: String, removing: Boolean,
     }
     val tint = if (removing) scheme.error else scheme.primary
     val onTint = if (removing) scheme.onError else scheme.onPrimary
+    val rim = scheme.surface
     val density = LocalDensity.current
     val pad = with(density) { 5.dp.roundToPx() }
 
@@ -171,9 +205,10 @@ internal fun SelectionRing(session: LassoSession, id: String, removing: Boolean,
                     ),
                 )
                 if (!preview) {
-                    // Check badge in the top-right corner.
+                    // Check badge in the top-right corner, lifted off the icon by a thin surface-coloured rim.
                     val r = 8.dp.toPx()
                     val c = Offset(size.width - r - 2.dp.toPx(), r + 2.dp.toPx())
+                    drawCircle(rim, r + 1.5.dp.toPx(), c)
                     drawCircle(tint, r, c)
                     val w = 1.8.dp.toPx()
                     drawLine(onTint, Offset(c.x - 3.6.dp.toPx(), c.y + 0.2.dp.toPx()), Offset(c.x - 1.0.dp.toPx(), c.y + 2.8.dp.toPx()), w, StrokeCap.Round)
@@ -197,12 +232,15 @@ internal fun DropPreview(session: LassoSession, cellW: Int, cellH: Int, origin: 
         val o = origin()
         val inset = 6.dp.toPx()
         val corner = CornerRadius(16.dp.toPx())
+        val outline = Stroke(1.5.dp.toPx())
+        val fill = tint.copy(alpha = 0.10f)
+        val line = tint.copy(alpha = 0.60f)
+        val size = Size(cellW - 2 * inset, cellH - 2 * inset)
         for (pl in plan.placements) {
             val x = o.x + pl.col * cellW + inset
             val y = o.y + pl.row * cellH + inset
-            val size = Size(cellW - 2 * inset, cellH - 2 * inset)
-            drawRoundRect(tint.copy(alpha = 0.10f), Offset(x, y), size, corner)
-            drawRoundRect(tint.copy(alpha = 0.60f), Offset(x, y), size, corner, style = Stroke(1.5.dp.toPx()))
+            drawRoundRect(fill, Offset(x, y), size, corner)
+            drawRoundRect(line, Offset(x, y), size, corner, style = outline)
         }
     }
 }

@@ -21,9 +21,12 @@ wallpaper (Material You) and a custom-accent scheme.
 surface and elevated for all three palettes.
 
 ## Scales
-* Space: 4 / 8 / 12 / 16 / 24 / 32 dp (`NivoSpace`)
-* Radius: control 16, card 24, sheet 28, dock 28, hero 32 (`NivoRadius`)
-* Elevation: chrome 0, content 1, interactive 3, modal 8 (`NivoElevation`)
+* Space: 2 / 4 / 8 / 12 / 16 / 24 / 32 / 48 dp (`NivoSpace`)
+* Radius: inner 6, control 14, card 20, sheet 28, dock 28, hero 28 (`NivoRadius`); Material `shapes` map onto these
+* Elevation: chrome 0, content 0, interactive 2, modal 6 (`NivoElevation`)
+* Touch: every tappable element is at least 48 dp (`NivoTouch.min`), even when it draws smaller
+* Emphasis alpha: high 1, medium 0.74, low 0.56, disabled 0.38, hairline 0.12 (`NivoAlpha`)
+* Press feedback: `Modifier.pressFeedback(interactionSource)` sinks an element while pressed, scaled by the motion preset
 * Type (`nivoTypography`): light 36–57sp display for numerals, restrained Medium weights for titles/labels.
   The system sans-serif is used; no proprietary font is bundled. User font choice (incl. custom file) overrides it.
 
