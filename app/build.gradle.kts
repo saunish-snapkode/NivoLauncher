@@ -15,8 +15,9 @@ android {
         applicationId = "com.snapkode.nivolauncher"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes -PversionCode / -PversionName (from the run number and the release tag); local builds keep the defaults.
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("versionName") as String?)?.takeIf { it.isNotBlank() } ?: "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

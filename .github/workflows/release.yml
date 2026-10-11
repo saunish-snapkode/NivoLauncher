@@ -1,0 +1,125 @@
+name: Release
+
+# Push a tag like v1.2.0 (or create a release with a new tag on GitHub) and this builds the APK and attaches it to the
+# GitHub Release for that tag, creating the release if it doesn't exist yet. It can also be run by hand for an existing tag.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and publish, e.g. v1.2.0'
+        required: true
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # create the release and upload the APK
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      # v1.2.3 -> versionName 1.2.3, versionCode 10203. Anything after the numbers (v1.2.3-beta1) stays in the name and
+      # marks the release as a pre-release. A tag that isn't x.y.z falls back to the run number for the code.
+      - name: Work out the version
+        id: version
+        run: |
+          NAME="${TAG#v}"
+          if [[ "$NAME" =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))? ]]; then
+            CODE=$(( 10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[4]:-0} ))
+          else
+            CODE=${{ github.run_number }}
+          fi
+          if [[ "$NAME" == *-* ]]; then PRE=true; else PRE=false; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRE" >> "$GITHUB_OUTPUT"
+          echo "Version $NAME ($CODE), prerelease=$PRE"
+
+      # The MET Norway contact (User-Agent) lives in local.properties, which is git-ignored.
+      - name: Write local.properties
+        env:
+          MET_CONTACT: ${{ secrets.MET_CONTACT }}
+        run: |
+          if [ -n "$MET_CONTACT" ]; then echo "met.contact=$MET_CONTACT" > local.properties; fi
+
+      # With the signing secrets set, the release build is signed with your key (users can update from one release to the
+      # next). Without them the workflow still publishes, but a debug-signed build that can't upgrade a signed install.
+      - name: Set up release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$STORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+            {
+              echo "storeFile=$RUNNER_TEMP/release.jks"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=${KEY_PASSWORD:-$STORE_PASSWORD}"
+            } > keystore.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Signing secrets are not set; publishing a debug-signed APK. See .github/RELEASING.md."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Build APK
+        run: |
+          ARGS="-PversionName=${{ steps.version.outputs.name }} -PversionCode=${{ steps.version.outputs.code }}"
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            ./gradlew :app:assembleRelease $ARGS --stacktrace
+            SRC=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+            OUT="NivoLauncher-${{ steps.version.outputs.name }}.apk"
+          else
+            ./gradlew :app:assembleDebug $ARGS --stacktrace
+            SRC=$(ls app/build/outputs/apk/debug/*.apk | head -n1)
+            OUT="NivoLauncher-${{ steps.version.outputs.name }}-debug.apk"
+          fi
+          mkdir -p dist
+          cp "$SRC" "dist/$OUT"
+          (cd dist && sha256sum "$OUT" > "$OUT.sha256")
+          ls -l dist
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f keystore.properties "$RUNNER_TEMP/release.jks" local.properties
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: Nivo Launcher ${{ steps.version.outputs.name }}
+          prerelease: ${{ steps.version.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.apk
+            dist/*.sha256
