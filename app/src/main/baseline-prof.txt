@@ -1,0 +1,3 @@
+# Everything the launcher itself ships is hot on first launch: compile it ahead of time instead of interpreting it.
+HSPLcom/snapkode/nivolauncher/**->**(**)**
+Lcom/snapkode/nivolauncher/**;

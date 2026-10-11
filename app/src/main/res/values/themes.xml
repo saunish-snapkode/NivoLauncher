@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.NivoLauncher" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Nivo mark, monochrome (themed icons): a rounded square and a dash, from nivo_launcher_icon.svg scaled 0.15 into the 108dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <group android:scaleX="0.71" android:scaleY="0.71" android:pivotX="256" android:pivotY="256">
+        <path
+            android:pathData="M192,139 L320,139 A53,53 0 0 1 373,192 L373,320 A53,53 0 0 1 320,373 L192,373 A53,53 0 0 1 139,320 L139,192 A53,53 0 0 1 192,139 Z"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="25"
+            android:fillColor="#00000000" />
+        <path
+            android:pathData="M213,256 L299,256"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="27"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

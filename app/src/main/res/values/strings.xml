@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Nivo Launcher</string>
+    <string name="lock_service_description">Lets Nivo Launcher lock the screen when you double-tap the home screen. It does not read any screen content.</string>
+    <string name="lock_service_label">Nivo Launcher screen lock</string>
+</resources>

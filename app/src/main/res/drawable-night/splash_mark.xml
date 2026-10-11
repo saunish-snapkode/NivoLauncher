@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Nivo mark breathing, from nivo_launcher_loading.svg: the dash shortens and returns every 1.8 s. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="240dp"
+            android:height="240dp"
+            android:viewportWidth="512"
+            android:viewportHeight="512">
+            <group android:scaleX="0.62" android:scaleY="0.62" android:pivotX="256" android:pivotY="256">
+                <path
+                    android:pathData="M192,139 L320,139 A53,53 0 0 1 373,192 L373,320 A53,53 0 0 1 320,373 L192,373 A53,53 0 0 1 139,320 L139,192 A53,53 0 0 1 192,139 Z"
+                    android:strokeColor="#FFF3F1EC"
+                    android:strokeWidth="25"
+                    android:fillColor="#00000000" />
+                <path
+                    android:name="dash"
+                    android:pathData="M213,256 L299,256"
+                    android:strokeColor="#FFF3F1EC"
+                    android:strokeWidth="27"
+                    android:strokeLineCap="round" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="dash">
+        <aapt:attr name="android:animation">
+            <set android:ordering="sequentially">
+                <objectAnimator
+                    android:propertyName="pathData"
+                    android:valueFrom="M213,256 L299,256"
+                    android:valueTo="M234,256 L278,256"
+                    android:valueType="pathType"
+                    android:duration="900"
+                    android:interpolator="@android:interpolator/fast_out_slow_in" />
+                <objectAnimator
+                    android:propertyName="pathData"
+                    android:valueFrom="M234,256 L278,256"
+                    android:valueTo="M213,256 L299,256"
+                    android:valueType="pathType"
+                    android:duration="900"
+                    android:interpolator="@android:interpolator/fast_out_slow_in" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>
