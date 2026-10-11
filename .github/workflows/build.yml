@@ -29,6 +29,8 @@ jobs:
 
       # Installs the SDK command-line tools and accepts the licences, so AGP can fetch the compileSdk platform it needs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools   # the default also asks for 'tools', which no longer exists
 
       - uses: gradle/actions/setup-gradle@v4
 
