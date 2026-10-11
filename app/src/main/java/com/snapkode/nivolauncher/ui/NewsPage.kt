@@ -71,6 +71,30 @@ import com.snapkode.nivolauncher.data.news.NewsCatalog
 import com.snapkode.nivolauncher.data.news.NewsStyle
 import com.snapkode.nivolauncher.ui.design.edgeFade
 import com.snapkode.nivolauncher.ui.design.nivoCard
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.outlined.Article
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.ripple
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 
 /**
  * The Headlines Pagelet: topic chips and a quiet stack of headlines from the sources the user chose, on a page of its own.
@@ -103,32 +127,43 @@ fun HeadlinesPage(
     Column(modifier.fillMaxSize()) {
         Row(Modifier.padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Headlines", style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface)
+                Text("Headlines", style = MaterialTheme.typography.headlineLarge, color = scheme.onSurface, modifier = Modifier.semantics { heading() })
                 Text(
                     if (state.loading && state.items.isEmpty()) "Fetching headlines…" else "${topic.label} · ${NewsCatalog.summary(prefs)}",
                     style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = { viewModel.loadNews(id, force = true) }) { Icon(Icons.Default.Refresh, "Refresh headlines", tint = scheme.onSurfaceVariant) }
+            // While a refresh runs the button becomes its own progress indicator, so a tap always gets an answer.
+            IconButton(onClick = { viewModel.loadNews(id, force = true) }, enabled = !state.loading) {
+                if (state.loading) CircularProgressIndicator(
+                    Modifier.size(20.dp).semantics { contentDescription = "Refreshing headlines" }, strokeWidth = 2.dp, color = scheme.primary,
+                )
+                else Icon(Icons.Default.Refresh, "Refresh headlines", tint = scheme.onSurfaceVariant)
+            }
             IconButton(onClick = onOptions) { Icon(Icons.Outlined.Tune, "Customise headlines", tint = scheme.onSurfaceVariant) }
         }
         LazyRow(
             modifier = Modifier.edgeFade(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = NivoSpace.l),
+            horizontalArrangement = Arrangement.spacedBy(NivoSpace.s),
         ) {
             items(topics) { t ->
                 val selected = t == topic
                 val shape = RoundedCornerShape(14.dp)
+                val chipBg by animateColorAsState(if (selected) scheme.primaryContainer else Color.Transparent, label = "topicBg")
+                val chipText by animateColorAsState(if (selected) scheme.onPrimaryContainer else scheme.onSurface, label = "topicText")
                 Text(
                     t.label,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) scheme.primary else scheme.onSurface,
+                    color = chipText,
+                    maxLines = 1,
                     modifier = Modifier
-                        .background(if (selected) scheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent, shape)
+                        // Draws 40 dp tall but answers to a full 48 dp touch.
+                        .minimumInteractiveComponentSize()
+                        .background(chipBg, shape)
                         .border(1.dp, if (selected) scheme.primary.copy(alpha = 0.4f) else scheme.outlineVariant, shape)
                         .clip(shape)
-                        .selectable(selected = selected, role = androidx.compose.ui.semantics.Role.Tab) { viewModel.setNewsTopic(id, t) }
+                        .selectable(selected = selected, role = Role.Tab) { viewModel.setNewsTopic(id, t) }
                         .heightIn(min = 40.dp)
                         .wrapContentHeight(Alignment.CenterVertically)
                         .padding(horizontal = 16.dp, vertical = 9.dp),
@@ -137,35 +172,43 @@ fun HeadlinesPage(
         }
         Box(Modifier.fillMaxSize()) {
             when {
-                NewsCatalog.plan(prefs, topic).isEmpty() -> Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (prefs.providers.isEmpty() && prefs.custom.isEmpty()) "Choose your news sources" else "Your sources don't cover ${topic.label}", style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    Text("Pick from the list, or add a feed of your own.", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    TextButton(onClick = onOptions) { Text("Choose sources") }
-                }
-                state.items.isEmpty() && state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center).size(28.dp), strokeWidth = 2.dp)
-                state.items.isEmpty() -> Column(
-                    Modifier.align(Alignment.Center).padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text("Couldn't load headlines", style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    Text("Check your connection and try again.", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                    TextButton(onClick = { viewModel.loadNews(id, force = true) }) { Text("Retry") }
-                }
+                NewsCatalog.plan(prefs, topic).isEmpty() -> NewsMessage(
+                    Icons.AutoMirrored.Outlined.Article,
+                    if (prefs.providers.isEmpty() && prefs.custom.isEmpty()) "Choose your news sources" else "Your sources don't cover ${topic.label}",
+                    "Pick from the list, or add a feed of your own.",
+                    "Choose sources", onOptions, Modifier.align(Alignment.Center),
+                )
+                state.items.isEmpty() && state.loading -> NewsSkeleton(prefs.style, prefs.images)
+                state.items.isEmpty() -> NewsMessage(
+                    Icons.Outlined.CloudOff,
+                    "Couldn't load headlines",
+                    "Check your connection and try again.",
+                    "Try again", { viewModel.loadNews(id, force = true) }, Modifier.align(Alignment.Center),
+                )
                 else -> {
                     val now = System.currentTimeMillis()
                     LazyColumn(
                         Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(if (prefs.style == NewsStyle.Headlines) 0.dp else 12.dp),
+                        contentPadding = PaddingValues(start = NivoSpace.l, end = NivoSpace.l, top = NivoSpace.m, bottom = NivoSpace.xl),
+                        verticalArrangement = Arrangement.spacedBy(if (prefs.style == NewsStyle.Headlines) 0.dp else NivoSpace.m),
                     ) {
                         // Some chosen sources couldn't be reached: say which, once, quietly.
                         if (state.failedSources.isNotEmpty() && !state.loading) item(key = "failed") {
-                            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).clickable { viewModel.loadNews(id, force = true) }.padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(scheme.surfaceContainerLow)
+                                    .clickable(role = Role.Button, onClickLabel = "Try again") { viewModel.loadNews(id, force = true) }
+                                    .padding(horizontal = NivoSpace.m, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Outlined.CloudOff, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
+                                Spacer(Modifier.width(NivoSpace.s))
                                 Text(
                                     "Couldn't reach " + state.failedSources.take(2).joinToString(", ") + if (state.failedSources.size > 2) " +${state.failedSources.size - 2}" else "",
                                     style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
                                 )
-                                Text("Retry", style = MaterialTheme.typography.labelMedium, color = scheme.primary)
+                                Text("Retry", style = MaterialTheme.typography.labelLarge, color = scheme.primary, modifier = Modifier.padding(start = NivoSpace.s))
                             }
                         }
                         items(state.items.size, key = { state.items[it].link }) { i ->
@@ -189,19 +232,26 @@ private fun CompactRow(item: NewsItem, now: Long, showImage: Boolean, onClick: (
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(16.dp)
     val image = if (showImage) rememberRemoteImage(item.imageUrl, widthDp = 84) else null
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().clip(shape).background(scheme.surfaceContainer).border(1.dp, scheme.outlineVariant, shape).clickable(onClick = onClick).padding(10.dp),
+        Modifier.fillMaxWidth().pressFeedback(press).clip(shape).background(scheme.surfaceContainer).border(1.dp, scheme.outlineVariant, shape)
+            .clickable(interactionSource = press, indication = ripple(), role = Role.Button, onClick = onClick)
+            .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showImage) {
-            Box(Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)).background(scheme.surfaceContainerHigh)) {
-                Crossfade(image, animationSpec = tween(300), label = "compactImage") { bmp ->
+            Box(Modifier.size(84.dp).clip(RoundedCornerShape(12.dp)).background(scheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+                Crossfade(image, animationSpec = tween(LocalMotion.current.duration(300)), label = "compactImage") { bmp ->
                     if (bmp != null) Image(bmp, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    // No picture (yet): a quiet glyph instead of an empty grey square.
+                    else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(Icons.AutoMirrored.Outlined.Article, null, Modifier.size(28.dp), tint = scheme.onSurfaceVariant.copy(alpha = 0.35f))
+                    }
                 }
             }
-            androidx.compose.foundation.layout.Spacer(Modifier.padding(start = 12.dp))
+            Spacer(Modifier.width(NivoSpace.m))
         }
-        Column(Modifier.weight(1f)) {
+        Column(Modifier.weight(1f).padding(vertical = NivoSpace.xxs)) {
             SourceAge(item, now, scheme.onSurfaceVariant)
             Text(item.title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
         }
@@ -212,10 +262,11 @@ private fun CompactRow(item: NewsItem, now: Long, showImage: Boolean, onClick: (
 @Composable
 private fun HeadlineRow(item: NewsItem, now: Long, last: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 4.dp)) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(role = Role.Button, onClick = onClick).padding(top = NivoSpace.m, start = NivoSpace.xs, end = NivoSpace.xs)) {
         SourceAge(item, now, scheme.onSurfaceVariant)
         Text(item.title, style = MaterialTheme.typography.titleMedium, color = scheme.onSurface, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
-        if (!last) androidx.compose.material3.HorizontalDivider(Modifier.padding(top = 12.dp), color = scheme.outlineVariant)
+        if (!last) androidx.compose.material3.HorizontalDivider(Modifier.padding(top = NivoSpace.m), color = scheme.outlineVariant)
+        else Spacer(Modifier.height(NivoSpace.m))
     }
 }
 
@@ -224,7 +275,71 @@ private fun SourceAge(item: NewsItem, now: Long, color: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(item.source.ifBlank { "News" }.uppercase(), style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         val ago = NewsFormat.ago(now, item.publishedAt)
-        if (ago.isNotEmpty()) Text("  ·  $ago", style = MaterialTheme.typography.labelSmall, color = color)
+        if (ago.isNotEmpty()) Text("  ·  $ago", style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
+    }
+}
+
+/** An icon on a tinted disc, a headline, a line and one action: the page's empty and error states. */
+@Composable
+private fun NewsMessage(icon: ImageVector, title: String, line: String, action: String, onAction: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth().padding(horizontal = NivoSpace.xxl, vertical = NivoSpace.xl), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(72.dp).background(scheme.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(32.dp), tint = scheme.onPrimaryContainer)
+        }
+        Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.l))
+        Text(
+            line, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = NivoSpace.xs),
+        )
+        FilledTonalButton(onClick = onAction, modifier = Modifier.padding(top = NivoSpace.l)) { Text(action) }
+    }
+}
+
+/** Placeholder shapes in the chosen style while the first headlines arrive, gently pulsing (still under reduced motion). */
+@Composable
+private fun NewsSkeleton(style: NewsStyle, images: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    val reduced = LocalMotion.current.reduced
+    val pulse by rememberInfiniteTransition(label = "newsSkeleton").animateFloat(
+        0.55f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "newsSkeletonPulse",
+    )
+    val fill = scheme.surfaceContainerHigh
+    val line = scheme.surfaceContainerHighest
+    Column(
+        Modifier.fillMaxSize().padding(start = NivoSpace.l, end = NivoSpace.l, top = NivoSpace.m)
+            .alpha(if (reduced) 0.8f else pulse)
+            .semantics(mergeDescendants = true) { contentDescription = "Loading headlines" },
+        verticalArrangement = Arrangement.spacedBy(NivoSpace.m),
+    ) {
+        repeat(4) { i ->
+            when (style) {
+                NewsStyle.Cards -> Box(
+                    Modifier.fillMaxWidth().height(if (i == 0) (if (images) 260.dp else 150.dp) else (if (images) 176.dp else 112.dp))
+                        .background(fill, RoundedCornerShape(22.dp)),
+                ) {
+                    Column(Modifier.align(Alignment.BottomStart).padding(18.dp)) {
+                        Box(Modifier.width(72.dp).height(8.dp).background(line, CircleShape))
+                        Box(Modifier.padding(top = NivoSpace.s).fillMaxWidth(0.8f).height(14.dp).background(line, CircleShape))
+                        Box(Modifier.padding(top = 6.dp).fillMaxWidth(0.5f).height(14.dp).background(line, CircleShape))
+                    }
+                }
+                else -> Row(
+                    Modifier.fillMaxWidth().background(if (style == NewsStyle.Compact) fill else Color.Transparent, RoundedCornerShape(16.dp)).padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (style == NewsStyle.Compact && images) {
+                        Box(Modifier.size(84.dp).background(line, RoundedCornerShape(12.dp)))
+                        Spacer(Modifier.width(NivoSpace.m))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Box(Modifier.width(64.dp).height(8.dp).background(line, CircleShape))
+                        Box(Modifier.padding(top = NivoSpace.s).fillMaxWidth(0.9f).height(12.dp).background(line, CircleShape))
+                        Box(Modifier.padding(top = 6.dp).fillMaxWidth(0.6f).height(12.dp).background(line, CircleShape))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -234,20 +349,28 @@ private fun NewsCard(item: NewsItem, featured: Boolean, now: Long, showImage: Bo
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(22.dp)
     val image = if (showImage) rememberRemoteImage(item.imageUrl, widthDp = 400) else null
+    val press = remember { MutableInteractionSource() }
+    // Without pictures the card is a calm tinted panel with theme-coloured text; with them, a photo under a scrim and white text.
+    val onCard = if (showImage) Color.White else scheme.onSurface
+    val onCardQuiet = if (showImage) Color.White.copy(alpha = 0.78f) else scheme.onSurfaceVariant
     Box(
         Modifier
             .fillMaxWidth()
             .height(if (!showImage) (if (featured) 150.dp else 112.dp) else if (featured) 260.dp else 176.dp)
+            .pressFeedback(press)
             .clip(shape)
-            .background(Brush.linearGradient(listOf(scheme.surfaceContainerHigh, lerp(scheme.surfaceContainerHigh, scheme.primary, 0.28f))))
+            .background(
+                if (showImage) Brush.linearGradient(listOf(scheme.surfaceContainerHigh, lerp(scheme.surfaceContainerHigh, scheme.primary, 0.28f)))
+                else Brush.linearGradient(listOf(scheme.surfaceContainer, lerp(scheme.surfaceContainer, scheme.primaryContainer, 0.9f)))
+            )
             .border(1.dp, scheme.outlineVariant, shape)
-            .clickable(onClick = onClick),
+            .clickable(interactionSource = press, indication = ripple(), role = Role.Button, onClick = onClick),
     ) {
-        Crossfade(image, animationSpec = tween(350), label = "newsImage") { bitmap ->
+        if (showImage) Crossfade(image, animationSpec = tween(LocalMotion.current.duration(350)), label = "newsImage") { bitmap ->
             if (bitmap != null) Image(bitmap, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop, alignment = Alignment.TopCenter)
         }
         // Scrim: clear at the top so the photo reads, dark at the bottom so the headline always does.
-        Box(
+        if (showImage) Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
                     0f to Color.Black.copy(alpha = 0.10f),
@@ -256,23 +379,23 @@ private fun NewsCard(item: NewsItem, featured: Boolean, now: Long, showImage: Bo
                 )
             )
         )
-        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 18.dp, vertical = 16.dp)) {
+        Column(Modifier.align(Alignment.BottomStart).padding(horizontal = 18.dp, vertical = NivoSpace.l)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     item.source.ifBlank { "News" }.uppercase(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.78f),
+                    color = onCardQuiet,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 val ago = NewsFormat.ago(now, item.publishedAt)
-                if (ago.isNotEmpty()) Text("  ·  $ago", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.78f))
+                if (ago.isNotEmpty()) Text("  ·  $ago", style = MaterialTheme.typography.labelSmall, color = onCardQuiet, maxLines = 1)
             }
             Text(
                 item.title,
                 style = if (featured) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-                color = Color.White,
-                maxLines = if (featured) 3 else 3,
+                color = onCard,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(top = 6.dp),
             )

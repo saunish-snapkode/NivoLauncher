@@ -1,6 +1,20 @@
 package com.snapkode.nivolauncher.ui
 
 import com.snapkode.nivolauncher.ui.design.NivoShapes
+import com.snapkode.nivolauncher.ui.design.NivoSpace
+import com.snapkode.nivolauncher.ui.design.LocalMotion
+import com.snapkode.nivolauncher.ui.design.NivoMark
+import com.snapkode.nivolauncher.ui.design.pressFeedback
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.ripple
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.offset
@@ -106,6 +120,7 @@ private val categories = listOf(
 @Composable
 fun SettingsScreen(viewModel: LauncherViewModel, initialRoute: String? = null, onClose: () -> Unit) {
     var route by remember { mutableStateOf(initialRoute) }
+    val motion = LocalMotion.current
     BackHandler {
         when (route) {
             null -> onClose()
@@ -121,8 +136,10 @@ fun SettingsScreen(viewModel: LauncherViewModel, initialRoute: String? = null, o
             targetState = route,
             transitionSpec = {
                 val forward = targetState != null && initialState == null || targetState == "hidden"
-                (slideInHorizontally(tween(260)) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(260))) togetherWith
-                    (slideOutHorizontally(tween(260)) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(160)))
+                val ms = motion.duration(280)
+                if (motion.reduced) fadeIn(tween(ms)) togetherWith fadeOut(tween(ms))
+                else (slideInHorizontally(tween(ms)) { if (forward) it / 4 else -it / 4 } + fadeIn(tween(ms))) togetherWith
+                    (slideOutHorizontally(tween(ms)) { if (forward) -it / 4 else it / 4 } + fadeOut(tween(ms * 3 / 5)))
             },
             label = "settingsRoute",
         ) { current ->
@@ -152,19 +169,29 @@ private fun Dashboard(viewModel: LauncherViewModel, onClose: () -> Unit, open: (
     val visible = categories.filter {
         !searching || it.title.contains(query, true) || it.keywords.contains(query.trim(), true)
     }
-    LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp)) {
+    LazyColumn(
+        Modifier.fillMaxSize().statusBarsPadding(),
+        contentPadding = PaddingValues(start = NivoSpace.l, end = NivoSpace.l, bottom = NivoSpace.xxl),
+    ) {
         item {
             Column {
-                IconButton(onClick = onClose, Modifier.padding(top = 8.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-                Text("Settings", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(start = 8.dp, top = 36.dp, bottom = 16.dp))
+                IconButton(onClick = onClose, Modifier.padding(top = NivoSpace.s)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                Text(
+                    "Settings", style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.padding(start = NivoSpace.s, top = NivoSpace.xl, bottom = NivoSpace.l).semantics { heading() },
+                )
             }
         }
         item {
             TextField(
                 value = query, onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                placeholder = { Text("Search Nivo settings") },
+                // Min height, not a fixed one, so large system font sizes never clip the text.
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                placeholder = { Text("Search settings") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = if (query.isNotEmpty()) {
+                    { IconButton(onClick = { query = "" }) { Icon(Icons.Default.Close, "Clear search") } }
+                } else null,
                 singleLine = true, shape = RoundedCornerShape(16.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = scheme.surfaceContainer, unfocusedContainerColor = scheme.surfaceContainer,
@@ -176,26 +203,31 @@ private fun Dashboard(viewModel: LauncherViewModel, onClose: () -> Unit, open: (
             item {
                 // Identity card: the accent this launcher is currently drawing from.
                 Row(
-                    Modifier.fillMaxWidth().padding(top = 16.dp)
-                        .nivoCard(RoundedCornerShape(20.dp), scheme.surfaceContainer, scheme.outlineVariant)
-                        .padding(20.dp),
+                    Modifier.fillMaxWidth().padding(top = NivoSpace.l)
+                        .clip(NivoShapes.Card)
+                        .background(scheme.surfaceContainer)
+                        // A faint wash of the accent from the mark's side: the card is about the colours you chose.
+                        .background(Brush.horizontalGradient(listOf(scheme.primaryContainer.copy(alpha = 0.55f), Color.Transparent)))
+                        .border(1.dp, scheme.outlineVariant, NivoShapes.Card)
+                        .padding(20.dp)
+                        .semantics(mergeDescendants = true) {},
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(Modifier.size(56.dp).background(scheme.primaryContainer, CircleShape).border(1.dp, scheme.primary.copy(alpha = 0.35f), CircleShape), contentAlignment = Alignment.Center) {
-                        Text("n", style = MaterialTheme.typography.headlineMedium, color = scheme.primary)
-                    }
-                    Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                    // The brand mark, as on the app icon: the one place in Settings that says whose launcher this is.
+                    NivoMark(56.dp)
+                    Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
                         Text("Nivo Launcher", style = MaterialTheme.typography.titleLarge)
                         Text(
                             "${settings.accent.label} accent · ${settings.clockStyle.label} clock",
                             style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
                     Box(Modifier.size(14.dp).background(scheme.primary, CircleShape))
                 }
             }
             item {
-                Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.padding(top = NivoSpace.m), verticalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
                     QuickToggle(
                         "Themed icons", "Tint app icons with wallpaper colours", Icons.Default.Contrast,
                         settings.themedIcons, NivoShapes.GroupSingle,
@@ -215,15 +247,32 @@ private fun Dashboard(viewModel: LauncherViewModel, onClose: () -> Unit, open: (
         sections.forEach { (title, list) ->
             if (list.isEmpty()) return@forEach
             if (title != null) item(key = "h-$title") {
-                SectionLabel(title, Modifier.padding(start = 8.dp, top = 28.dp, bottom = 8.dp))
-            } else item(key = "h-top") { Spacer(Modifier.height(16.dp)) }
+                SectionLabel(title, Modifier.padding(start = NivoSpace.s, top = 28.dp, bottom = NivoSpace.s))
+            } else item(key = "h-top") { Spacer(Modifier.height(NivoSpace.l)) }
             itemsIndexed(list, key = { _, c -> c.id }) { index, category ->
                 CategoryRow(category, settings, index, list.size, NivoShapes.group(index, list.size)) { open(category.id) }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(NivoSpace.s))
             }
         }
         if (visible.isEmpty()) {
-            item { Text("No settings match “$query”", Modifier.padding(32.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xxl, vertical = NivoSpace.xxxl),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(Modifier.size(64.dp).background(scheme.surfaceContainerHigh, CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.SearchOff, null, Modifier.size(30.dp), tint = scheme.onSurfaceVariant)
+                    }
+                    Text(
+                        "No settings match “${query.trim()}”", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = NivoSpace.l),
+                    )
+                    Text(
+                        "Try a simpler word, like “grid”, “dock” or “font”.", style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.padding(top = NivoSpace.xs),
+                    )
+                }
+            }
         }
     }
 }
@@ -231,18 +280,23 @@ private fun Dashboard(viewModel: LauncherViewModel, onClose: () -> Unit, open: (
 @Composable
 private fun QuickToggle(title: String, subtitle: String, icon: ImageVector, checked: Boolean, shape: androidx.compose.ui.graphics.Shape, onChange: (Boolean) -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().nivoCard(shape, scheme.surfaceContainer, scheme.outlineVariant)
-            .toggleable(value = checked, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().pressFeedback(press).nivoCard(shape, scheme.surfaceContainer, scheme.outlineVariant)
+            .toggleable(value = checked, interactionSource = press, indication = ripple(), role = Role.Switch, onValueChange = onChange)
+            .heightIn(min = 72.dp)
+            .padding(horizontal = NivoSpace.l, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(44.dp).background(scheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = scheme.primary)
+        Box(
+            Modifier.size(44.dp).background(if (checked) scheme.primaryContainer else scheme.surfaceContainerHighest, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = if (checked) scheme.onPrimaryContainer else scheme.primary)
         }
-        Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         androidx.compose.material3.Switch(
             checked = checked, onCheckedChange = null,
@@ -258,15 +312,21 @@ private fun QuickToggle(title: String, subtitle: String, icon: ImageVector, chec
 @Composable
 private fun CategoryRow(category: Category, settings: LauncherSettings, index: Int, count: Int, shape: androidx.compose.ui.graphics.Shape, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val press = remember { MutableInteractionSource() }
     Row(
-        Modifier.fillMaxWidth().nivoCard(shape, scheme.surfaceContainer, scheme.outlineVariant).clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().pressFeedback(press).nivoCard(shape, scheme.surfaceContainer, scheme.outlineVariant)
+            .clickable(interactionSource = press, indication = ripple(), role = Role.Button, onClick = onClick)
+            .heightIn(min = 72.dp)
+            .padding(start = NivoSpace.l, end = NivoSpace.m, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(44.dp).background(scheme.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) { Icon(category.icon, null, tint = scheme.primary) }
-        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+        Column(Modifier.weight(1f).padding(horizontal = NivoSpace.l)) {
             Text(category.title, style = MaterialTheme.typography.titleMedium)
-            Text(category.summary(settings), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2)
+            Text(category.summary(settings), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
+        // Chevron: this row leads somewhere.
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = scheme.onSurfaceVariant.copy(alpha = 0.7f))
     }
 }
 
@@ -274,11 +334,14 @@ private fun CategoryRow(category: Category, settings: LauncherSettings, index: I
 @Composable
 private fun LivePill(modifier: Modifier = Modifier) {
     Row(
-        modifier.background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f), CircleShape).padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f), CircleShape)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .padding(horizontal = NivoSpace.m, vertical = NivoSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
-        Text("  Live preview", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Live preview", Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -314,24 +377,32 @@ private fun PageScaffold(
     preview: (@Composable () -> Unit)?,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val scroll = rememberScrollState()
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = NivoSpace.xs, vertical = NivoSpace.s), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 8.dp))
+            Text(
+                title, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = NivoSpace.xs, end = NivoSpace.l).semantics { heading() },
+            )
         }
         if (preview != null) {
             // Pinned: stays visible while the settings below scroll, so every change is seen live.
             Box(
-                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 14.dp),
+                Modifier.fillMaxWidth().padding(top = NivoSpace.xs, bottom = 14.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     preview()
-                    LivePill(Modifier.padding(top = 8.dp))
+                    LivePill(Modifier.padding(top = NivoSpace.m))
                 }
             }
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp), content = content)
+        // A hairline fades in once the list slides under the pinned header, so the edge reads as an edge.
+        val scrolled by remember { derivedStateOf { scroll.value > 0 } }
+        val edge by animateFloatAsState(if (scrolled) 1f else 0f, tween(LocalMotion.current.duration(180)), label = "settingsEdge")
+        Box(Modifier.fillMaxWidth().height(1.dp).alpha(edge).background(MaterialTheme.colorScheme.outlineVariant))
+        Column(Modifier.weight(1f).verticalScroll(scroll).padding(top = NivoSpace.xs, bottom = NivoSpace.xl), content = content)
     }
 }
 
@@ -372,7 +443,7 @@ private fun CategoryPage(category: Category, viewModel: LauncherViewModel, onBac
             "search" -> SearchSettings(s, ::update)
             "widgets" -> SettingsCard("Widgets") {
                 ToggleRow("Rounded widget corners", s.roundedWidgets, "Clip widgets to a rounded rectangle") { v -> update { it.copy(roundedWidgets = v) } }
-                ActionRow("Add or manage widgets", "Long-press an empty spot on the home screen and choose Widgets", Icons.Default.Widgets) {}
+                InfoRow("Add or manage widgets", "Press and hold an empty spot on the home screen, then choose Widgets", Icons.Default.Widgets)
             }
             "badges" -> BadgeSettings(s, viewModel, ::update)
             "wallpaper" -> DynamicWallpaperSettings(viewModel)
@@ -507,7 +578,7 @@ private fun ColumnScope.HomeSettings(s: LauncherSettings, viewModel: LauncherVie
                 ToggleRow("Use Fahrenheit", s.weatherFahrenheit) { v -> update { it.copy(weatherFahrenheit = v) } }
             }
             if (choosingPlace) PlaceSearchDialog(viewModel) { choosingPlace = false }
-            ToggleRow("Now playing", s.smartspaceMedia, "Music controls here. Needs notification access (see Notification badges).") { v ->
+            ToggleRow("Now playing", s.smartspaceMedia, "Music controls at the top of home. Needs notification access (see Notification badges)") { v ->
                 update { it.copy(smartspaceMedia = v) }
             }
         }
@@ -555,8 +626,8 @@ private fun ColumnScope.PageletSettings(viewModel: LauncherViewModel) {
                 if (type == com.snapkode.nivolauncher.pagelet.PageletType.HEADLINES) Icons.AutoMirrored.Filled.Article else Icons.Outlined.AutoAwesome,
             ) { editing = item.id }
         }
-        if (homeLocked.lockHome) ActionRow("Add a Pagelet", "Unlock the home layout to add one", Icons.Default.Add) {}
-        else if (viewModel.addablePagelets().isEmpty()) ActionRow("Add a Pagelet", "Every Pagelet is already on home", Icons.Default.Add) {}
+        if (homeLocked.lockHome) InfoRow("Add a Pagelet", "Unlock the home screen layout to add one", Icons.Default.Add)
+        else if (viewModel.addablePagelets().isEmpty()) InfoRow("Add a Pagelet", "Every Pagelet is already on your home screen", Icons.Default.Add)
         else ActionRow("Add a Pagelet", "Fills a whole home page", Icons.Default.Add) { adding = true }
     }
     editing?.let { id ->
@@ -628,7 +699,7 @@ private fun ColumnScope.DrawerSettings(s: LauncherSettings, update: Update, open
         ChipPicker("Layout", DrawerMode.entries, s.drawerMode, { it.label }) { v -> update { it.copy(drawerMode = v) } }
         ChipPicker("Sort apps", DrawerSort.entries, s.drawerSort, { it.label }) { v -> update { it.copy(drawerSort = v) } }
         ToggleRow("A–Z fast scroller", s.drawerScroller) { v -> update { it.copy(drawerScroller = v) } }
-        ActionRow("Favourites", "${s.favorites.size} pinned — long-press an app in the drawer and choose Add to favourites", Icons.Default.Star) {}
+        InfoRow("Favourites", "${s.favorites.size} pinned. Press and hold an app in the drawer, then choose Add to favourites", Icons.Default.Star)
         ToggleRow("Suggested apps", s.predictions, "Your most-used apps at the top") { v -> update { it.copy(predictions = v) } }
     }
     SettingsCard("Grid") {
@@ -653,16 +724,28 @@ private fun ColumnScope.DrawerSettings(s: LauncherSettings, update: Update, open
 @Composable
 private fun ColumnScope.LibrarySettings(s: LauncherSettings, viewModel: LauncherViewModel, update: Update) {
     val config by viewModel.libraryConfig.collectAsState()
+    var confirmReset by remember { mutableStateOf(false) }
+    if (confirmReset) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset categories?") },
+            text = { Text("Moved apps go back to their automatic category, and custom or hidden categories are removed.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.resetLibrary(); confirmReset = false }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } },
+        )
+    }
     SettingsCard("App Library") {
-        ToggleRow("Show the App Library page", s.libraryPage, "A page just right of Home with every app in a category") { v -> update { it.copy(libraryPage = v) } }
+        ToggleRow("Show the App Library page", s.libraryPage, "A page just right of Home, with every app sorted into a category") { v -> update { it.copy(libraryPage = v) } }
     }
     SettingsCard("Categories") {
         ActionRow(
             "Reset categories",
             "${config.overrides.size} moved apps · ${config.custom.size} custom · ${config.hidden.size} hidden",
             Icons.Default.Refresh,
-        ) { viewModel.resetLibrary() }
-        ActionRow("How to edit", "Long-press a category card to rename, move or hide it. Long-press an app inside to move it to another category.", Icons.Default.Info) {}
+        ) { confirmReset = true }
+        InfoRow("How to edit", "Press and hold a category card to rename, move or hide it. Press and hold an app inside to move it to another category.", Icons.Default.Info)
     }
 }
 
@@ -687,7 +770,7 @@ private fun ColumnScope.MotionSettings(s: LauncherSettings, update: Update) {
         ToggleRow("Haptic feedback", s.hapticsEnabled, "A light tap when you pick an icon up") { v -> update { it.copy(hapticsEnabled = v) } }
     }
     SettingsCard("Accessibility") {
-        ActionRow("System animations", "Turning animations off in Android's developer or accessibility settings automatically switches Nivo to Reduced motion.", Icons.Default.Info) {}
+        InfoRow("System animations", "Turning animations off in Android's accessibility or developer settings switches Nivo to Reduced motion automatically.", Icons.Default.Info)
     }
 }
 
@@ -787,7 +870,7 @@ private fun ColumnScope.GestureSettings(s: LauncherSettings, viewModel: Launcher
         SettingsCard("Permission") {
             ActionRow(
                 "Screen lock service",
-                if (LockScreenService.isEnabled) "Enabled" else "Needed to lock the screen or open recents — tap to enable",
+                if (LockScreenService.isEnabled) "Enabled" else "Needed to lock the screen or open recent apps. Tap to turn on",
                 Icons.Default.Lock,
             ) { viewModel.openAccessibilitySettings() }
         }
@@ -849,7 +932,7 @@ private fun ColumnScope.BadgeSettings(s: LauncherSettings, viewModel: LauncherVi
     SettingsCard("Access") {
         ActionRow(
             "Notification access",
-            if (listenerOn) "Allowed" else "Needed for dots and counts — tap to allow",
+            if (listenerOn) "Allowed" else "Needed for dots and counts. Tap to allow",
             Icons.Default.Notifications,
         ) { viewModel.openNotificationAccessSettings() }
     }
@@ -878,7 +961,7 @@ private fun ColumnScope.BackupSettings(viewModel: LauncherViewModel) {
         val ctx = androidx.compose.ui.platform.LocalContext.current
         ActionRow(
             "Weather data: MET Norway",
-            "Forecasts for the Today Pagelet. CC BY 4.0 and NLOD 2.0 — tap for the licence.",
+            "Forecasts for the Today Pagelet. CC BY 4.0 and NLOD 2.0. Tap to read the licence",
             Icons.Default.Info,
         ) { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://api.met.no/doc/License")).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
     }
@@ -893,16 +976,24 @@ private fun ColumnScope.BackupSettings(viewModel: LauncherViewModel) {
 private fun HiddenApps(viewModel: LauncherViewModel) {
     val apps by viewModel.apps.collectAsState()
     val s by viewModel.settings.collectAsState()
+    Text(
+        "Hidden apps stay installed but leave the drawer and search. Tick an app to hide it.",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 28.dp, vertical = NivoSpace.xs),
+    )
     SettingsCard {
         apps.forEach { app ->
             val hidden = app.id in s.hiddenApps
             Row(
-                Modifier.fillMaxWidth().clickable { viewModel.setHidden(app.id, !hidden) }.padding(horizontal = 20.dp, vertical = 6.dp),
+                // One checkbox for assistive tech: the whole row toggles.
+                Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    .toggleable(value = hidden, role = Role.Checkbox) { viewModel.setHidden(app.id, it) }
+                    .padding(horizontal = 20.dp, vertical = NivoSpace.xs),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(NivoSpace.l),
             ) {
-                Image(app.icon, null, Modifier.size(40.dp))
-                Text(app.label, Modifier.weight(1f))
+                Image(app.icon, null, Modifier.size(40.dp).alpha(if (hidden) 0.6f else 1f))
+                Text(app.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Checkbox(checked = hidden, onCheckedChange = null)
             }
         }
@@ -940,7 +1031,7 @@ private fun ColumnScope.DynamicWallpaperSettings(viewModel: LauncherViewModel) {
                     Modifier.size(width = 64.dp, height = 88.dp).clip(shape)
                         .background(MaterialTheme.colorScheme.surfaceContainerHighest, shape)
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-                        .clickable { picking = period; gallery.launch("image/*") },
+                        .clickable(onClickLabel = "Choose ${period.label} wallpaper", role = Role.Button) { picking = period; gallery.launch("image/*") },
                     contentAlignment = Alignment.Center,
                 ) {
                     val bitmap = thumb
@@ -960,8 +1051,8 @@ private fun ColumnScope.DynamicWallpaperSettings(viewModel: LauncherViewModel) {
                         }
                     }
                     Text(period.range, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row {
-                        TextButton(onClick = { picking = period; gallery.launch("image/*") }, contentPadding = PaddingValues(end = 12.dp)) {
+                    Row(Modifier.offset(x = (-12).dp)) {
+                        TextButton(onClick = { picking = period; gallery.launch("image/*") }) {
                             Text(if (version == 0L) "Choose" else "Change")
                         }
                         if (version != 0L) TextButton(onClick = { viewModel.clearPeriodWallpaper(period) }) { Text("Remove") }

@@ -53,6 +53,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import com.snapkode.nivolauncher.ui.design.NivoSpace
 import com.snapkode.nivolauncher.LauncherViewModel
 import com.snapkode.nivolauncher.data.news.NewsCatalog
 import com.snapkode.nivolauncher.data.news.NewsCategory
@@ -80,74 +89,98 @@ fun HeadlinesOptions(
     Column {
         Text(
             "Choose where your headlines come from and how they look.",
-            style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = SheetInset, vertical = NivoSpace.xs),
         )
-            // ---- sources --------------------------------------------------------------------------------------
-            val chosen = prefs.providers.count { NewsCatalog.find(it) != null } + prefs.custom.size
-            SectionTitle("Sources", if (chosen == 0) "None chosen" else "$chosen chosen")
-            NewsCategory.entries.forEach { cat ->
-                val list = NewsCatalog.providers.filter { it.category == cat }
-                if (list.isNotEmpty()) {
-                    Text(cat.label.uppercase(), style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(start = 24.dp, top = 10.dp, bottom = 2.dp))
-                    list.forEach { p ->
-                        SourceRow(p, p.id in prefs.providers) {
-                            onChange { it.copy(providers = if (p.id in it.providers) it.providers - p.id else it.providers + p.id) }
-                        }
+
+        // ---- sources --------------------------------------------------------------------------------------
+        val chosen = prefs.providers.count { NewsCatalog.find(it) != null } + prefs.custom.size
+        SectionTitle("Sources", if (chosen == 0) "None chosen" else "$chosen chosen")
+        NewsCategory.entries.forEach { cat ->
+            val list = NewsCatalog.providers.filter { it.category == cat }
+            if (list.isNotEmpty()) {
+                Text(
+                    cat.label.uppercase(),
+                    style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = SheetInset, top = NivoSpace.m, bottom = NivoSpace.xxs).semantics { heading() },
+                )
+                list.forEach { p ->
+                    SourceRow(p, p.id in prefs.providers) {
+                        onChange { it.copy(providers = if (p.id in it.providers) it.providers - p.id else it.providers + p.id) }
                     }
                 }
             }
+        }
 
-            // ---- your own feeds -------------------------------------------------------------------------------
-            SectionTitle("Your own feeds", if (prefs.custom.isEmpty()) null else "${prefs.custom.size}")
-            prefs.custom.forEach { f ->
-                Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(f.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(f.url, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    IconButton(onClick = { onChange { it.copy(custom = it.custom - f) } }) { Icon(Icons.Filled.Close, "Remove ${f.name}") }
+        // ---- your own feeds -------------------------------------------------------------------------------
+        SectionTitle("Your own feeds", if (prefs.custom.isEmpty()) null else "${prefs.custom.size}")
+        prefs.custom.forEach { f ->
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(start = SheetInset, end = NivoSpace.s),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(f.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(f.url, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                IconButton(onClick = { onChange { it.copy(custom = it.custom - f) } }) { Icon(Icons.Filled.Close, "Remove ${f.name}") }
             }
-            OutlinedButton(onClick = { adding = true }, modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)) {
-                Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Add a feed address")
-            }
-            Text(
-                "Any website's RSS or Atom link works. Your feeds appear under Top.",
-                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp),
-            )
+        }
+        OutlinedButton(onClick = { adding = true }, modifier = Modifier.padding(horizontal = SheetInset, vertical = NivoSpace.s)) {
+            Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(NivoSpace.s)); Text("Add a feed address")
+        }
+        Text(
+            "Any website's RSS or Atom link works. Your feeds appear under Top.",
+            style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = SheetInset),
+        )
 
-            // ---- look -----------------------------------------------------------------------------------------
-            SectionTitle("Look", null)
-            Text("Style", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-            Segments(
-                NewsStyle.entries, prefs.style, { when (it) { NewsStyle.Cards -> "Cards"; NewsStyle.Compact -> "Compact"; NewsStyle.Headlines -> "Headlines" } },
-            ) { st -> onChange { it.copy(style = st) } }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f).padding(end = 16.dp)) {
-                    Text("Pictures", style = MaterialTheme.typography.titleSmall)
-                    Text("Turn off to save data and keep the page quieter", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
-                }
-                Switch(checked = prefs.images, onCheckedChange = { v -> onChange { it.copy(images = v) } })
+        // ---- look -----------------------------------------------------------------------------------------
+        SectionTitle("Look", null)
+        FieldLabel("Style")
+        Segments(
+            NewsStyle.entries, prefs.style, { when (it) { NewsStyle.Cards -> "Cards"; NewsStyle.Compact -> "Compact"; NewsStyle.Headlines -> "Headlines" } },
+        ) { st -> onChange { it.copy(style = st) } }
+        // The whole row is the switch, as in Settings.
+        Row(
+            Modifier.fillMaxWidth().padding(top = NivoSpace.s).heightIn(min = 64.dp)
+                .toggleable(value = prefs.images, role = Role.Switch) { v -> onChange { it.copy(images = v) } }
+                .padding(horizontal = SheetInset, vertical = NivoSpace.s),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).padding(end = NivoSpace.l)) {
+                Text("Pictures", style = MaterialTheme.typography.titleSmall)
+                Text("Turn off to save data and keep the page quieter", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
             }
-            Text("Stories from each source", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
-            Segments(NewsPrefs.PerSourceChoices, prefs.perSource, { "$it" }) { n -> onChange { it.copy(perSource = n) } }
-            Text("Order", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp))
-            Segments(NewsOrder.entries, prefs.order, { it.label }) { o -> onChange { it.copy(order = o) } }
-            Text(prefs.order.about, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+            Switch(checked = prefs.images, onCheckedChange = null)
+        }
+        FieldLabel("Stories from each source")
+        Segments(NewsPrefs.PerSourceChoices, prefs.perSource, { "$it" }) { n -> onChange { it.copy(perSource = n) } }
+        FieldLabel("Order")
+        Segments(NewsOrder.entries, prefs.order, { it.label }) { o -> onChange { it.copy(order = o) } }
+        Text(
+            prefs.order.about, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = SheetInset, vertical = NivoSpace.xs),
+        )
 
-            // Contents start at the same 24 dp edge as everything above.
-            TextButton(
-                onClick = { onChange { NewsPrefs() } }, modifier = Modifier.padding(start = 24.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(end = 12.dp, top = 8.dp, bottom = 8.dp),
-            ) { Text("Reset sources and look") }
+        // Contents start at the same 24 dp edge as everything above.
+        TextButton(
+            onClick = { onChange { NewsPrefs() } }, modifier = Modifier.padding(start = SheetInset, top = NivoSpace.s),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(end = NivoSpace.m, top = NivoSpace.s, bottom = NivoSpace.s),
+        ) { Text("Reset sources and look") }
     }
     if (adding) AddFeedDialog(checkFeed, prefs, onChange, onDone = { adding = false })
 }
 
+/** The sheet's side inset: every title, row and control lines up on it. */
+private val SheetInset = 24.dp
+
 @Composable
 private fun SectionTitle(title: String, trailing: String?) {
-    Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+    Row(
+        Modifier.fillMaxWidth().padding(start = SheetInset, end = SheetInset, top = NivoSpace.xl, bottom = NivoSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
         if (trailing != null) Text(trailing, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -157,7 +190,10 @@ private fun SourceRow(p: NewsProvider, selected: Boolean, onToggle: () -> Unit) 
     val scheme = MaterialTheme.colorScheme
     val topics = remember(p) { p.topics.sortedBy { it.ordinal }.joinToString(" · ") { it.label } }
     Row(
-        Modifier.fillMaxWidth().clickable(role = Role.Checkbox, onClick = onToggle).padding(horizontal = 24.dp, vertical = 8.dp)
+        // Toggleable (not just clickable) so the checked state is announced with the name.
+        Modifier.fillMaxWidth().heightIn(min = 64.dp)
+            .toggleable(value = selected, role = Role.Checkbox) { onToggle() }
+            .padding(horizontal = SheetInset, vertical = NivoSpace.s)
             .semantics(mergeDescendants = true) { contentDescription = "${p.name}. ${p.about}" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -165,13 +201,22 @@ private fun SourceRow(p: NewsProvider, selected: Boolean, onToggle: () -> Unit) 
             Text(p.name.removePrefix("The ").take(1), style = MaterialTheme.typography.titleMedium, color = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(p.name, style = MaterialTheme.typography.titleSmall)
+        Column(Modifier.weight(1f).padding(end = NivoSpace.s)) {
+            Text(p.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(p.about, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(topics, style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Checkbox(checked = selected, onCheckedChange = null)
     }
+}
+
+/** The small label above a group of choices, on one rhythm for all of them. */
+@Composable
+private fun FieldLabel(text: String) {
+    Text(
+        text, style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(start = SheetInset, end = SheetInset, top = NivoSpace.m, bottom = NivoSpace.xs),
+    )
 }
 
 /** Asks for a feed address, checks it really is a feed (and reads its name), then adds it. */
@@ -206,11 +251,22 @@ private fun AddFeedDialog(checkFeed: suspend (String) -> Pair<String, Int>?, pre
         title = { Text("Add a feed") },
         text = {
             Column {
-                OutlinedTextField(url, { url = it; error = null }, singleLine = true, label = { Text("Feed address") }, placeholder = { Text("example.com/rss") }, enabled = !busy)
-                Spacer(Modifier.size(8.dp))
-                OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name (optional)") }, enabled = !busy)
-                if (busy) Text("Checking the feed…", Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                error?.let { Text(it, Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                OutlinedTextField(
+                    url, { url = it; error = null }, Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("Feed address") }, placeholder = { Text("example.com/rss") }, enabled = !busy, isError = error != null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                )
+                Spacer(Modifier.size(NivoSpace.s))
+                OutlinedTextField(
+                    name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Name (optional)") }, enabled = !busy,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (!busy && url.isNotBlank()) submit() }),
+                )
+                if (busy) Row(Modifier.padding(top = NivoSpace.m), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text("Checking the feed…", Modifier.padding(start = NivoSpace.s), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                }
+                error?.let { Text(it, Modifier.padding(top = NivoSpace.m), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = { TextButton(onClick = ::submit, enabled = !busy && url.isNotBlank()) { Text("Check and add") } },
@@ -221,7 +277,7 @@ private fun AddFeedDialog(checkFeed: suspend (String) -> Pair<String, Int>?, pre
 /** A row of equal-width choices on the same 24 dp edges as the rest of the sheet; one is selected. */
 @Composable
 private fun <T> Segments(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = SheetInset), horizontalArrangement = Arrangement.spacedBy(NivoSpace.s)) {
         options.forEach { option ->
             FilterChip(
                 selected = option == selected, onClick = { onSelect(option) },
