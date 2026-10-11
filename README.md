@@ -23,6 +23,11 @@ keyPassword=...
 ```
 then `./gradlew :app:assembleRelease`.
 
+## Download / releases
+Signed APKs are attached to each [GitHub Release](../../releases). CI builds and tests every pull request, and pushing a
+`v*` tag (e.g. `v1.0.0`) publishes a new release automatically. See [.github/RELEASING.md](.github/RELEASING.md) for
+how to cut a release and set up the signing secrets.
+
 ## Permissions
 `QUERY_ALL_PACKAGES` (list every app — core to a launcher), `READ_CONTACTS` / `READ_CALENDAR` (optional search and
 "At a glance"), `INTERNET` (optional web suggestions), `EXPAND_STATUS_BAR` (notification gesture),
